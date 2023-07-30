@@ -17,7 +17,9 @@
 		#include <windows.h>
 		#define DLL_EXPORT __declspec(dllexport)
 		//***** DLL function prototypes *****//
+		DLL_EXPORT int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);
 	#else
 		//***** Shared object function prototypes *****//
+		int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);
 	#endif
 #endif
