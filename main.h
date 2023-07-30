@@ -18,8 +18,10 @@
 		#define DLL_EXPORT __declspec(dllexport)
 		//***** DLL function prototypes *****//
 		DLL_EXPORT int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);
+		DLL_EXPORT void CleanShapeList(CubeShape *shapeList, int shapeCount);
 	#else
 		//***** Shared object function prototypes *****//
 		int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);
+		void CleanShapeList(CubeShape *shapeList, int shapeCount);
 	#endif
 #endif

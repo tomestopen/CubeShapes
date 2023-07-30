@@ -380,3 +380,12 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	free((void *) shapeDict);
 	return shapeCount;
 }
+
+void CleanShapeList(CubeShape *shapeList, int shapeCount){
+	//this function is used to clean up the shape arrays in the provided cube shape list, and then to clean it
+	for (int i = 0; i < shapeCount; i++){
+		free((void *) shapeList[i].shape);
+	}
+	//clean the shape list
+	free((void *) shapeList);
+}
