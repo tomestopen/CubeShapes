@@ -1,7 +1,9 @@
 import os
 import pathlib
+import time
 from CSAdapt import CubeShape, CubeShapesSL
 from ctypes import POINTER, pointer, c_char, cast
+from datetime import datetime, timezone
 
 class ShapeFinder:
 	
@@ -75,11 +77,20 @@ class ShapeFinder:
 		sourceList = sourceShapeList
 		while cubeCountP <= cubeCount:
 			#get the descendents shapes for the current source shapes
+			time = datetime.now(timezone.utc).timestamp()
 			descList = POINTER(CubeShape)()
 			descCount = self.CSSL.getDescendents(pointer(descList), sourceList, sourceShapeCount)
 			#clean up the source list, if it was obtained from the shared library
 			if sourceList != sourceShapeList:
 				self.CSSL.cleanShapeList(sourceList, sourceShapeCount)
+			#get the time taken in seconds, and round it
+			time = datetime.now(timezone.utc).timestamp() - time
+			if time < 1:
+				time = round(time, 5)
+			elif time < 10:
+				time = round(time, 1)
+			else:
+				time = round(time)
 			#create a file and copy the descendent shapes into it
 			shapeFilePath = os.path.join(self.shapeDirPath, "shapes_" + str(cubeCountP) + ".txt")
 			with open(shapeFilePath, "w") as file:
@@ -93,7 +104,7 @@ class ShapeFinder:
 			sourceList = descList
 			sourceShapeCount = descCount
 			#warn the user the file was created
-			print("Created shape file for cube count " + str(cubeCountP) + " at " + shapeFilePath)
+			print("Created shape file for cube count " + str(cubeCountP) + " at " + shapeFilePath + " in " + str(time) + " seconds")
 			cubeCountP += 1
 		#clean up the descendent shape array
 		self.CSSL.cleanShapeList(descList, descCount)
