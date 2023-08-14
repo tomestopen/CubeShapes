@@ -1,5 +1,19 @@
 #include "main.h"
 
+//definitions
+#define MAXDICTLEN 10000000 //the maximum dictionary length is ten million entries
+//external variables
+static int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1, 1, -1}, {-1, 1, -1}, {1, -1, -1}, {-1, -1, -1}};
+static int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+static int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 4, 6}, {0, 1, 5, 6}, {1, 2, 4, 7}};
+static int dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5}, dimCmpHD[] = {0, 1};
+//function declarations
+static int GetCubeCount(CubeShape *source);
+static int GetShapeDictionarySize(int cubeCount);
+static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape);
+static int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *dimCmp, int dimCmpCount);
+static CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, int shapeCount);
+
 int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	//this function returns all unique cube shapes descended from all the source cubes shapes
 	CubeShape *descArr;
@@ -17,42 +31,24 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	}
 	//if there is a source list, we take each member and try to find all possible shapes that can be created by adding one cube
 	int bwidth, bheight, bdepth, bsize, blx, bly, blz, vmove;
-	int buf, count, isNew, match;
+	int buf;
 	int dictLen;
 	int zMove, dblLine;
 	int pos, posC, posS, posF, posL;
 	int sourceConnectValue, connectValue;
-	int posCon[] = {0, 0, 0, 0, 0, 0};
+	int posCon[6];
 	int cubeCount;
 	int shellWeight, shellCount, shellCountNext;
-	int dimLen[] = {0, 0, 0}, dimMov[] = {0, 0, 0}, dimLenC[] = {0, 0, 0}, dimMovC[] = {0, 0, 0};
-	int corner[] = {0, 0, 0, 0, 0, 0, 0, 0};
-	int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1, 1, -1}, {-1, 1, -1}, {1, -1, -1}, {-1, -1, -1}};
-	int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
-	int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 4, 6}, {0, 1, 5, 6}, {1, 2, 4, 7}};
-	int *dimCmp, dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5}, dimCmpHD[] = {0, 1};
-	int cmpCount;
-	int adjValue;
-	int i, j, k, l, m, n, o, p;
+	int dimMov[3], dimLenC[3];
+	int i, j, k, l, m, n, o;
 	char *box;
 	int shapeCount = 0;
 	CubeShape bufShape;
-	CubeShape *shapeC, *shapeAll;
-	void **shapeDict, **link, **linkP;
-	//get the highest dimension in the source shapes, which is equivalent to the number of cubes
-	cubeCount = 0;
-	for (i = 0; i < sourceCount; i++){
-		if (source[i].width > cubeCount)
-			cubeCount = source[i].width;
-	}
+	void **shapeDict;
 	//the new cube count is the source + 1
-	cubeCount++;
+	cubeCount = GetCubeCount(source) + 1;
 	//create the shape dictionary and set all entries to 0
-	shellWeight = cubeCount + 7; //the maximum possible shell weight is 7 (the base shell weight) + the number of cubes in the new shape
-	count = ((cubeCount / 3) + 1); //get the side length of the shape with the biggest possible box, which is three lines perpendicular to each other in each dimension. we add 1 to make sure to be larger
-	count = (count > 1)? count * count * count : 8; //cube it (as there are three dimensions) to get the maximum box size (minimum 8)
-	dictLen = ((shellWeight + 6) * count * 3) + ((cubeCount - 1) * 150); //the length of the dictionary is determined by the largest possible shape value
-	dictLen = (dictLen > 10000000)? 10000000 : dictLen; //limit the size of the dictionary to 10 million entries maximum
+	dictLen = GetShapeDictionarySize(cubeCount);
 	shapeDict = (void **) malloc(sizeof(void *) * dictLen);
 	for (i = 0; i < dictLen; i++){
 		shapeDict[i] = 0;
@@ -187,17 +183,14 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 							posC = posL = posF;
 						}
 						box[posS] = 0; //remove the new cube from the creation box
-						//get the dimensions and moves of the new shape
-						dimLen[0] = bufShape.width;
-						dimLen[1] = bufShape.height;
-						dimLen[2] = bufShape.depth;
-						dimMov[0] = 1; //width move
-						dimMov[1] = bufShape.width; //height move
-						dimMov[2] = bufShape.width * bufShape.height; //depth move
 						//once the new shape is created, calculate its value
 						//*******************
 						//shape value calculation
 						//*******************
+						//get the dimensions and moves of the new shape
+						dimMov[0] = 1; //width move
+						dimMov[1] = bufShape.width; //height move
+						dimMov[2] = bufShape.width * bufShape.height; //depth move
 						//the shape value is a combination of the total number of connections, the weighted difference between its dimensions and the cube shell sum
 						bufShape.value = sourceConnectValue + connectValue + (bufShape.width - bufShape.height) * 100 + (bufShape.width - bufShape.depth) * 50;
 						//the cube shell sum is the sum by dimension of all cubes in successive shells multiplied by the corresponding shell weight
@@ -252,142 +245,8 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 						//*******************
 						//shape uniqueness check
 						//*******************
-						//check in the shape "dictionary" if there is an adjusted value match
-						adjValue = bufShape.value % 10000000;
-						if (shapeDict[adjValue]){
-							//if there is a match, we must look through all shapes with the same value to determine if they are identical to the new shape
-							//calculate the corners of the new shape box
-							buf = bufShape.width * (bufShape.height - 1);
-							corner[1] = corner[0] + bufShape.width - 1; //upper right front corner
-							corner[2] = corner[0] + buf; //lower left front corner
-							corner[3] = corner[1] + buf; //lower right front corner
-							buf = dimMov[2] * (bufShape.depth - 1);
-							corner[4] = corner[0] + buf; //upper left back corner
-							corner[5] = corner[1] + buf; //upper right back corner
-							corner[6] = corner[2] + buf; //lower left back corner
-							corner[7] = corner[3] + buf; //lower right back corner
-							//the checks we must do depend on how many dimensions are of the same length
-							if (bufShape.width == bufShape.height){
-								//if the width is equal to the height, the number of comparisons depend on whether the width is also equal to the depth
-								if (bufShape.width == bufShape.depth){
-									//if the width is equal to the depth as well, all three dimensions are equal, and we must make a comparison for all dimension orders
-									dimCmp = dimCmpWHD;
-									cmpCount = 5;
-								}
-								else {
-									//if they are not equal, we only need to check the dimension orders where width = width and width = height
-									dimCmp = dimCmpWH;
-									cmpCount = 2;
-								}
-							}
-							else if (bufShape.height == bufShape.depth){
-								//if the width is not equal to the height, but the height is equal to the depth, check the dimension orders where height = height and height = depth
-								dimCmp = dimCmpHD;
-								cmpCount = 2;
-							}
-							else {
-								//otherwise, simply compare them when the dimension order is the same
-								dimCmp = dimCmpN;
-								cmpCount = 1;
-							}
-							//now compare the new shape to each shape in the linked list found at the dictionary index corresponding to the shape value
-							link = (void **) shapeDict[adjValue];
-							isNew = 1;
-							while (link){ //keep going until the end of the linked list
-								shapeC = (CubeShape *) link[0];
-								//compare that the new shape and this shape have the same value and box dimensions
-								if ((shapeC->value == bufShape.value) && (shapeC->width == bufShape.width) && (shapeC->height == bufShape.height) && (shapeC->depth == bufShape.depth)){
-									//if the dimensions and value are the same, we must check whether the cube positions match exactly
-									//there are six possible dimension orders (XYZ, YXZ, XZY, ZYX, YZX, ZXY) and each have four associated corners to start the check
-									for (l = 0; l < cmpCount; l++){ //for each dimension order in the comparison list
-										//define the dimension length for the current dimension order
-										dimLenC[0] = dimLen[dimOrder[dimCmp[l]][0]];
-										dimLenC[1] = dimLen[dimOrder[dimCmp[l]][1]];
-										dimLenC[2] = dimLen[dimOrder[dimCmp[l]][2]];
-										for (m = 0; m < 4; m++){ //for each box corner associated with that dimension order
-											//define the dimension moves for the current dimension order and box corner
-											dimMovC[0] = dimMov[dimOrder[dimCmp[l]][0]] * cornerDir[dimCorner[l][m]][dimOrder[dimCmp[l]][0]];
-											dimMovC[1] = dimMov[dimOrder[dimCmp[l]][1]] * cornerDir[dimCorner[l][m]][dimOrder[dimCmp[l]][1]];
-											dimMovC[2] = dimMov[dimOrder[dimCmp[l]][2]] * cornerDir[dimCorner[l][m]][dimOrder[dimCmp[l]][2]];
-											//go through the new shape in the direction of the current comparison, and the current link shape linearly, and check if they have cubes in matching positions
-											pos = 0;
-											posC = posL = posF = corner[dimCorner[l][m]];
-											match = 1;
-											for (n = 0; n < dimLenC[2]; n++){
-												for (o = 0; o < dimLenC[1]; o++){
-													for (p = 0; p < dimLenC[0]; p++){
-														//we compare the two positions with an exclusive or. they differ if the result is 1
-														if (bufShape.shape[posC] ^ shapeC->shape[pos++]){
-															//if the positions don't match, we, know the shapes are not the same and can stop the comparison in this orientation
-															match = 0;
-															goto checkMatch;
-														}
-														posC += dimMovC[0];
-													}
-													//get the new "line" position in the shape box
-													posL += dimMovC[1];
-													posC = posL;
-												}
-												//get the new "frame" position in the shape box
-												posF += dimMovC[2];
-												posC = posL = posF;
-											}
-											//check if all the positions matched
-											checkMatch: if (match){
-												//if all the positions match, the shapes are identical, we can stop the comparisons
-												isNew = 0;
-												goto checkNew;
-											}
-										}
-									}
-								}
-								//move to the next link in the list
-								linkP = link;
-								link = (void **) link[1];
-							}
-							//if the shape is new add it as the last link in the list
-							checkNew: if (isNew){
-								//create the permanent shape object
-								shapeC = (CubeShape *) malloc(sizeof(CubeShape));
-								shapeC->value = bufShape.value;
-								shapeC->width = bufShape.width;
-								shapeC->height = bufShape.height;
-								shapeC->depth = bufShape.depth;
-								count = bufShape.width * bufShape.height * bufShape.depth;
-								shapeC->shape = (char *) malloc(count);
-								for (l = 0; l < count; l++){
-									shapeC->shape[l] = bufShape.shape[l];
-								}
-								//create the linked list that will contain the shape pointer
-								link = (void **) malloc(sizeof(void *) * 2);
-								link[0] = (void *) shapeC;
-								link[1] = 0;
-								//add the linked list as the next link in the current list
-								linkP[1] = (void *) link;
-								shapeCount++;
-							}
-						}
-						else {
-							//if there is no match, the shape is unique. add it to the dictionary
-							//create the permanent shape object
-							shapeC = (CubeShape *) malloc(sizeof(CubeShape));
-							shapeC->value = bufShape.value;
-							shapeC->width = bufShape.width;
-							shapeC->height = bufShape.height;
-							shapeC->depth = bufShape.depth;
-							count = bufShape.width * bufShape.height * bufShape.depth;
-							shapeC->shape = (char *) malloc(count);
-							for (l = 0; l < count; l++){
-								shapeC->shape[l] = bufShape.shape[l];
-							}
-							//create the linked list that will contain the shape pointer
-							link = (void **) malloc(sizeof(void *) * 2);
-							link[0] = (void *) shapeC;
-							link[1] = 0;
-							//add the linked list to the dictionary
-							shapeDict[adjValue] = (void *) link;
-							shapeCount++;
-						}
+						//increase the shape count if the new shape was added to the dictionary (and was therefore unique)
+						shapeCount += AddUniqueShape(shapeDict, &bufShape);
 					}
 				}
 			}
@@ -396,19 +255,218 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 		free(box);
 		free(bufShape.shape);
 	}
-	//go through the shape dictionary, copy the shapes into the final shape array, and clean up the linked lists and shape objects
-	shapeAll = (CubeShape *) malloc(sizeof(CubeShape) * shapeCount);
+	//return the final shape array and shape count
+	*descendents = ShapeDictionaryToArray(shapeDict, dictLen, shapeCount);
+	return shapeCount;
+}
+
+int GetCubeCount(CubeShape *source){
+	//this function get the cube count for the specified cube shape
+	int i, boxSize, cubeCount;
+	cubeCount = 0;
+	boxSize = source->width * source->height * source->depth;
+	//go through the entire shape box and count the number of cubes
+	for (i = 0; i < boxSize; i++){
+		cubeCount += source->shape[i];
+	}
+	return cubeCount;
+}
+
+int GetShapeDictionarySize(int cubeCount){
+	//this function returns the size of the dictionary required to store shapes made with the specified cube count
+	int shellWeight, count, dictLen;
+	shellWeight = cubeCount + 7; //the maximum possible shell weight is 7 (the base shell weight) + the number of cubes in the new shape
+	count = ((cubeCount / 3) + 1); //get the side length of the shape with the biggest possible box, which is three lines perpendicular to each other in each dimension. we add 1 to make sure to be larger
+	count = (count > 1)? count * count * count : 8; //cube it (as there are three dimensions) to get the maximum box size (minimum 8)
+	dictLen = ((shellWeight + 6) * count * 3) + ((cubeCount - 1) * 150); //the length of the dictionary is determined by the largest possible shape value
+	dictLen = (dictLen > MAXDICTLEN)? MAXDICTLEN : dictLen; //limit the size of the dictionary to the predefined maximum
+	return dictLen;
+}
+
+static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
+	//this function checks whether the new shape already exists in the provided dictionary, and adds it if it doesn't
+	int buf, count, match, adjValue;
+	CubeShape *shape;
+	void **link, **linkP;
+	int corner[8];
+	int *dimCmp;
+	int i;
+	//check that the new shape value is already present in the dictionary
+	adjValue = newShape->value % MAXDICTLEN;
+	if (shapeDictionary[adjValue]){
+		//if there is a match, we must look through all shapes with the same value to determine if they are identical to the new shape
+		//calculate the corners of the new shape box
+		buf = newShape->width * (newShape->height - 1);
+		corner[0] = 0;
+		corner[1] = corner[0] + newShape->width - 1; //upper right front corner
+		corner[2] = corner[0] + buf; //lower left front corner
+		corner[3] = corner[1] + buf; //lower right front corner
+		buf = (newShape->width * newShape->height) * (newShape->depth - 1);
+		corner[4] = corner[0] + buf; //upper left back corner
+		corner[5] = corner[1] + buf; //upper right back corner
+		corner[6] = corner[2] + buf; //lower left back corner
+		corner[7] = corner[3] + buf; //lower right back corner
+		//the checks we must do depend on how many dimensions are of the same length
+		if (newShape->width == newShape->height){
+			//if the width is equal to the height, the number of comparisons depend on whether the width is also equal to the depth
+			if (newShape->width == newShape->depth){
+				//if the width is equal to the depth as well, all three dimensions are equal, and we must make a comparison for all dimension orders
+				dimCmp = dimCmpWHD;
+				count = 5;
+			}
+			else {
+				//if they are not equal, we only need to check the dimension orders where width = width and width = height
+				dimCmp = dimCmpWH;
+				count = 2;
+			}
+		}
+		else if (newShape->height == newShape->depth){
+			//if the width is not equal to the height, but the height is equal to the depth, check the dimension orders where height = height and height = depth
+			dimCmp = dimCmpHD;
+			count = 2;
+		}
+		else {
+			//otherwise, simply compare them when the dimension order is the same
+			dimCmp = dimCmpN;
+			count = 1;
+		}
+		//now compare the new shape to each shape in the linked list found at the dictionary index corresponding to the shape value
+		link = (void **) shapeDictionary[adjValue];
+		while (link){ //keep going until the end of the linked list
+			if ((match = ShapeMatch(newShape, (CubeShape *) link[0], corner, dimCmp, count)))
+				break; //exit as soon as we find a match
+			//move to the next link in the list
+			linkP = link;
+			link = (void **) link[1];
+		}
+		//check whether there was any match
+		if (match){
+			//if there was a match the shape is not new, and we exit
+			return 0;
+		}
+		else{
+			//if the shape did not match any of the previous ones, it is new and we can add it as the last link in the list
+			//create a new copy of the shape object
+			shape = (CubeShape *) malloc(sizeof(CubeShape));
+			shape->value = newShape->value;
+			shape->width = newShape->width;
+			shape->height = newShape->height;
+			shape->depth = newShape->depth;
+			count = newShape->width * newShape->height * newShape->depth;
+			shape->shape = (char *) malloc(count);
+			for (i = 0; i < count; i++){
+				shape->shape[i] = newShape->shape[i];
+			}
+			//create the linked list that will contain the shape pointer
+			link = (void **) malloc(sizeof(void *) * 2);
+			link[0] = (void *) shape;
+			link[1] = 0;
+			//add the linked list as the next link in the current list
+			linkP[1] = (void *) link;
+		}
+	}
+	else {
+		//if there is no match, the shape is unique. add it to the dictionary
+		//create a new copy of the shape object
+		shape = (CubeShape *) malloc(sizeof(CubeShape));
+		shape->value = newShape->value;
+		shape->width = newShape->width;
+		shape->height = newShape->height;
+		shape->depth = newShape->depth;
+		count = newShape->width * newShape->height * newShape->depth;
+		shape->shape = (char *) malloc(count);
+		for (i = 0; i < count; i++){
+			shape->shape[i] = newShape->shape[i];
+		}
+		//create the linked list that will contain the shape pointer
+		link = (void **) malloc(sizeof(void *) * 2);
+		link[0] = (void *) shape;
+		link[1] = 0;
+		//add the linked list to the dictionary
+		shapeDictionary[adjValue] = (void *) link;
+	}
+	return 1;
+}
+
+int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *dimCmp, int dimCmpCount){
+	//this function checks that the two provided cube shapes are identical
+	int i, j, k, l, m;
+	int dimLen[3], dimMov[3], dimLenC[3], dimMovC[3];
+	int pos, posC, posF, posL;
+	int match;
+	//check that the first an second shape have the same value and dimensions
+	if ((firstShape->value == secondShape->value) && (firstShape->width == secondShape->width) && (firstShape->height == secondShape->height) && (firstShape->depth == secondShape->depth)){
+		//if the dimensions and value are the same, we must check whether the cube positions match exactly
+		//get the dimensions and moves of the both shapes (since we know they have the same dimensions)
+		dimLen[0] = firstShape->width;
+		dimLen[1] = firstShape->height;
+		dimLen[2] = firstShape->depth;
+		dimMov[0] = 1; //width move
+		dimMov[1] = firstShape->width; //height move
+		dimMov[2] = firstShape->width * firstShape->height; //depth move
+		//there are six possible dimension orders (XYZ, YXZ, XZY, ZYX, YZX, ZXY) and each have four associated corners to start the check
+		for (i = 0; i < dimCmpCount; i++){ //for each dimension order in the comparison list
+			//define the dimension length for the current dimension order
+			dimLenC[0] = dimLen[dimOrder[dimCmp[i]][0]];
+			dimLenC[1] = dimLen[dimOrder[dimCmp[i]][1]];
+			dimLenC[2] = dimLen[dimOrder[dimCmp[i]][2]];
+			for (j = 0; j < 4; j++){ //for each box corner associated with that dimension order
+				//define the dimension moves for the current dimension order and box corner
+				dimMovC[0] = dimMov[dimOrder[dimCmp[i]][0]] * cornerDir[dimCorner[i][j]][dimOrder[dimCmp[i]][0]];
+				dimMovC[1] = dimMov[dimOrder[dimCmp[i]][1]] * cornerDir[dimCorner[i][j]][dimOrder[dimCmp[i]][1]];
+				dimMovC[2] = dimMov[dimOrder[dimCmp[i]][2]] * cornerDir[dimCorner[i][j]][dimOrder[dimCmp[i]][2]];
+				//go through the new shape in the direction of the current comparison, and the current link shape linearly, and check if they have cubes in matching positions
+				pos = 0;
+				posC = posL = posF = corner[dimCorner[i][j]];
+				match = 1;
+				for (k = 0; k < dimLenC[2]; k++){
+					for (l = 0; l < dimLenC[1]; l++){
+						for (m = 0; m < dimLenC[0]; m++){
+							//we compare the two positions with an exclusive or. they differ if the result is 1
+							if (firstShape->shape[posC] ^ secondShape->shape[pos++]){
+								//if the positions don't match, we, know the shapes are not the same and can stop the comparison in this orientation
+								match = 0;
+								goto checkMatch;
+							}
+							posC += dimMovC[0];
+						}
+						//get the new "line" position in the shape box
+						posL += dimMovC[1];
+						posC = posL;
+					}
+					//get the new "frame" position in the shape box
+					posF += dimMovC[2];
+					posC = posL = posF;
+				}
+				//check if all the positions matched
+				checkMatch: if (match){
+					//if all the positions match, the shapes are identical, we can stop the comparisons and return the match signal
+					return 1;
+				}
+			}
+		}
+	}
+	//return the no match signal
+	return 0;
+}
+
+CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, int shapeCount){
+	//this function return a shape array created from a dictionary, and cleans up the dictionary
+	CubeShape *shapeC, *shapeArr;
+	void **link, **linkP;
+	int i, pos;
+	shapeArr = (CubeShape *) malloc(sizeof(CubeShape) * shapeCount);
 	pos = 0;
-	for (i = 0; i < dictLen; i++){
-		if (shapeDict[i]){
-			link = (void **) shapeDict[i];
+	for (i = 0; i < dictionarySize; i++){
+		if (shapeDictionary[i]){
+			link = (void **) shapeDictionary[i];
 			while (link){
 				shapeC = (CubeShape *) link[0];
-				shapeAll[pos].value = shapeC->value;
-				shapeAll[pos].width = shapeC->width;
-				shapeAll[pos].height = shapeC->height;
-				shapeAll[pos].depth = shapeC->depth;
-				shapeAll[pos].shape = shapeC->shape;
+				shapeArr[pos].value = shapeC->value;
+				shapeArr[pos].width = shapeC->width;
+				shapeArr[pos].height = shapeC->height;
+				shapeArr[pos].depth = shapeC->depth;
+				shapeArr[pos].shape = shapeC->shape;
 				pos++;
 				free((void *) shapeC);
 				linkP = link;
@@ -417,10 +475,8 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 			}
 		}
 	}
-	//return the final shape array and clean up the dictionary
-	*descendents = shapeAll;
-	free((void *) shapeDict);
-	return shapeCount;
+	free((void *) shapeDictionary);
+	return shapeArr;
 }
 
 void CleanShapeList(CubeShape *shapeList, int shapeCount){
