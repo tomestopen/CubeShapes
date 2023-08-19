@@ -17,7 +17,7 @@ class ShapeFinder:
 		if not os.path.isdir(self.shapeDirPath):
 			os.mkdir(self.shapeDirPath)
 
-	def find(self, cubeCount):
+	def find(self, cubeCount, threadCount = 1):
 		#this function tries to find the all the unique shapes that can be made with the specified amount of cubes
 		#first we check that a shapes file is present in the shapes directory
 		found = False
@@ -79,7 +79,12 @@ class ShapeFinder:
 			#get the descendents shapes for the current source shapes
 			time = datetime.now(timezone.utc).timestamp()
 			descList = POINTER(CubeShape)()
-			descCount = self.CSSL.getDescendents(pointer(descList), sourceList, sourceShapeCount)
+			if (threadCount > 1) and (callable(getattr(self.CSSL, "getDescendentsMulti", None))):
+				#use the multi threaded get descendents function if it is available
+				descCount = self.CSSL.getDescendentsMulti(pointer(descList), sourceList, sourceShapeCount, threadCount)
+			else:
+				#otherwise use the single thread version
+				descCount = self.CSSL.getDescendents(pointer(descList), sourceList, sourceShapeCount)
 			#clean up the source list, if it was obtained from the shared library
 			if sourceList != sourceShapeList:
 				self.CSSL.cleanShapeList(sourceList, sourceShapeCount)
