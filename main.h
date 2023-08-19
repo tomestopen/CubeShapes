@@ -19,6 +19,7 @@
 		//***** DLL function prototypes *****//
 		DLL_EXPORT int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);
 		DLL_EXPORT void CleanShapeList(CubeShape *shapeList, int shapeCount);
+		DLL_EXPORT int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads);
 	#else
 		//***** Shared object function prototypes *****//
 		int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);

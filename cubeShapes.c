@@ -487,3 +487,138 @@ void CleanShapeList(CubeShape *shapeList, int shapeCount){
 	//clean the shape list
 	free((void *) shapeList);
 }
+
+#ifdef BUILD_DLL
+
+typedef struct sWorkData {
+	CubeShape *descendentArr;
+	CubeShape *source;
+	int descCount;
+	int sourceCount;
+} WorkData;
+
+VOID CALLBACK DescendentWorkCallback(PTP_CALLBACK_INSTANCE instance, PVOID parameters, PTP_WORK work){
+	//this is the work callback function used by the worker threads
+	//retrieve the work parameters
+	WorkData *workData = (WorkData *) parameters;
+	//launch the get descendents function with the given parameters
+	workData->descCount = GetDescendents(&workData->descendentArr, workData->source, workData->sourceCount);
+}
+
+int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads){
+	//this function returns the descendents of the source shapes, splitting the workload between multiple threads
+	//check that the source has at least ten shapes
+	if (sourceCount <= 100){
+		//if there are less than a hundred source shapes, simply return the results from the single thread function
+		return GetDescendents(descendents, source, sourceCount);
+	}
+	//if there are more than ten sources, use multiple threads
+	TP_CALLBACK_ENVIRON callBackEnv;
+	PTP_POOL pool = 0;
+	PTP_WORK *workArr;
+	PTP_CLEANUP_GROUP cleanupgroup;
+	int cleanStep = 0;
+	int workCount, hasPartialBatch, workDone;
+	CubeShape *shapeArr;
+	WorkData *workDataArr;
+	int dictLen;
+	void **shapeDict;
+	int shapeCount = 0;
+	int i, j;
+	//get the number of work items and initialize the work arrays
+	hasPartialBatch = ((sourceCount % 100) > 0);
+	workCount = (sourceCount / 100) + hasPartialBatch;
+	workDataArr = (WorkData *) malloc(sizeof(WorkData) * workCount);
+	//add the work data for all work groups
+	shapeArr = source;
+	for (i = 0; i < workCount; i++){
+		workDataArr[i].sourceCount = 100; //the source count is always 100 except for the last work batch
+		workDataArr[i].source = shapeArr;
+		workDataArr[i].descCount = -1;
+		shapeArr += 100;
+	}
+	if (hasPartialBatch)
+		workDataArr[workCount - 1].sourceCount = (sourceCount % 100); //if the last work batch is partial (not 100 shapes) store the correct source count
+	//create the thread pool work array
+	workArr = malloc(sizeof(PTP_WORK) * workCount);
+	//set up thread pool
+	InitializeThreadpoolEnvironment(&callBackEnv);
+	if (!(pool = CreateThreadpool(0))) goto poolCleanup;
+	cleanStep = 1;
+	//assign number of threads
+	maxThreads = (maxThreads > 1)? maxThreads : 1;
+	SetThreadpoolThreadMaximum(pool, maxThreads);
+    if (!SetThreadpoolThreadMinimum(pool, 1)) goto poolCleanup;
+	//create pool clean-up group
+	if (!(cleanupgroup = CreateThreadpoolCleanupGroup())) goto poolCleanup;
+	cleanStep = 2;
+	//associate callback environment and clean-up group to thread pool
+    SetThreadpoolCallbackPool(&callBackEnv, pool);
+    SetThreadpoolCallbackCleanupGroup(&callBackEnv, cleanupgroup, 0);
+	//build the thread pool work
+	for (i = 0; i < workCount; i++){
+		if (!(workArr[i] = CreateThreadpoolWork(DescendentWorkCallback, (void *) &workDataArr[i], &callBackEnv))) goto poolCleanup;
+	}
+	cleanStep = 3;
+	//once all the thread pool work has been successfully created, submit it all
+	for (i = 0; i < workCount; i++){
+		SubmitThreadpoolWork(workArr[i]);
+	}
+	//create a dictionary to store the combined shapes
+	dictLen = GetShapeDictionarySize(GetCubeCount(source) + 1);
+	shapeDict = (void **) malloc(sizeof(void *) * dictLen);
+	for (i = 0; i < dictLen; i++){
+		shapeDict[i] = 0;
+	}
+	//wait for all work batches to be completed
+	while(1){
+		//check that the work is done
+		workDone = 1;
+		for (i = 0; i < workCount; i++){
+			if (workDataArr[i].descCount == -1){
+				//if one of the descendent counts is still at -1 (the initial value), at least one of the work batches is not done
+				workDone = 0;
+				break;
+			}
+		}
+		//if the work is done, we exit
+		if (workDone) break;
+		//otherwise sleep for 10 milliseconds
+		Sleep(10);
+	}
+	//once all the partial descendents lists have been completed, combine them in the dictionary
+	for (i = 0; i < workCount; i++){
+		shapeArr = workDataArr[i].descendentArr;
+		for (j = 0; j < workDataArr[i].descCount; j++){
+			//try to add the shape to the dictionary
+			shapeCount += AddUniqueShape(shapeDict, &shapeArr[j]);
+			//clean up the shape
+			free((void *) shapeArr[j].shape);
+		}
+		//clean up the shape array
+		free((void *) shapeArr);
+	}
+	//return the final shape array
+	*descendents = ShapeDictionaryToArray(shapeDict, dictLen, shapeCount);
+	//clean up all the thread pool resources
+	poolCleanup:
+	switch (cleanStep) {
+        case 3:
+            //clean up the clean-up group members
+            CloseThreadpoolCleanupGroupMembers(cleanupgroup, 0, 0);
+        case 2:
+            //clean up the clean-up group
+            CloseThreadpoolCleanupGroup(cleanupgroup);
+        case 1:
+            //clean up the thread pool
+            CloseThreadpool(pool);
+        default:
+            break;
+    }
+	//clean up other function resources
+	free((void *) workDataArr);
+	free((void *) workArr);
+	//return the shape count
+	return shapeCount;
+}
+#endif

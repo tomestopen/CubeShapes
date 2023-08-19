@@ -38,3 +38,8 @@ class CubeShapesSL:
 			#load the clean shape list function
 			self.cleanShapeList = self.SL.CleanShapeList
 			self.cleanShapeList.argtypes = [POINTER(CubeShape), c_int]
+			#load the multi threaded get descendents function, (if on windows)
+			if system == "Windows":
+				self.getDescendentsMulti = self.SL.GetDescendentsMulti
+				self.getDescendentsMulti.argtypes = [POINTER(POINTER(CubeShape)), POINTER(CubeShape), c_int, c_int]
+				self.getDescendentsMulti.restype = c_int
