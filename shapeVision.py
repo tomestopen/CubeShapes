@@ -42,11 +42,19 @@ class ShapeVision:
 					shapeList.append(shape)
 		shapeCount = len(shapeList)
 		#inform the user of the number of shapes and ask for instructions
-		infoStr = "There " + ("are " if shapeCount > 1 else "is ") + str(shapeCount) + " shapes with a cube count of " + str(cubeCount) + "\n"
+		infoStr = "-------------------------------------\n"
+		infoStr += "There " + ("are " if shapeCount > 1 else "is ") + str(shapeCount) + " shapes with a cube count of " + str(cubeCount) + "\n"
+		infoStr += "-------------------------------------\n"
 		infoStr += "Type the number of the shape you want.\n"
-		infoStr += "You can request a series of shapes by typing two numbers separated by a space.\n"
+		infoStr += "You can request several shapes by typing their numbers separated by spaces.\n"
+		infoStr += "You can request a range of shapes by typing two numbers separated by a minus sign.\n"
 		infoStr += "A maximum of 30 shapes can be displayed at a time.\n"
+		infoStr += "-------------------------------------\n"
 		infoStr += "You can quit by typing 'quit' or 'q'\n"
+		infoStr += "-------------------------------------\n"
+		outBoundStr = "Index out of range. Valid shapes indexes are 1 to " + str(shapeCount) + "\n"
+		invalidStr = "Invalid Command\n"
+		tooManyStr = "Too many shapes requests\n"
 		while True:
 			#print the instructions and wait for a response
 			print(infoStr)
@@ -54,51 +62,92 @@ class ShapeVision:
 			#check if the user wants to quit
 			if (inpStr == "quit") or (inpStr == "q"):
 				break
+			#check that the request was a series
 			inpArr = inpStr.split()
-			#check that the instructions are valid
-			isRange = (len(inpArr) == 2)
-			if (len(inpArr) > 2) or (not inpArr[0].isnumeric()) or (isRange and not inpArr[1].isnumeric()):
-				print("Invalid Command\n")
-				continue
-			#check that the numbers are valid indexes
-			start = int(inpArr[0])
-			stop = int(inpArr[1]) if isRange else start
-			if (start < 1) or (start > shapeCount) or (stop < 1) or (stop > shapeCount):
-				print("Number outside the range of possible shapes\n")
-				continue
-			#check there are no more than thirty shapes
-			if start - stop + 1 > 30:
-				print("Too many shapes requests\n")
-				continue
-			#rearrange the indexes if need be
-			if start > stop:
-				buf = start
-				start = stop
-				stop = buf
-			#print out the range of plotted shapes
-			infStr = "Displaying shape"
+			isSeries = (len(inpArr) > 1)
+			if isSeries:
+				#if it is, get the list of shape indexes requested
+				indexList = []
+				valid = True
+				for inp in inpArr:
+					#check that this input is numeric
+					if (inp.isnumeric()):
+						#if the input is numeric, check that it is in the correct range
+						index = int(inp)
+						if (index < 1) or (index > shapeCount):
+							#if it is not, exit
+							print(outBoundStr)
+							valid = False
+							break
+						else:
+							#otherwise add it to the index list
+							indexList.append(index - 1)
+					else:
+						#if the input is not numeric, this is an invalid command
+						print(invalidStr)
+						valid = False
+						break
+				#check there are no more than thirty shapes
+				if len(indexList) > 30:
+					print(tooManyStr)
+					continue
+				#if the command was invalid return to the prompt
+				if not valid:
+					continue
+			#check that the request was a range
+			inpArr = inpStr.split("-")
+			isRange = (not isSeries) and (len(inpArr) > 1)
 			if isRange:
-				infStr += "s " + str(start) + " to " + str(stop)
-			else:
-				infStr += " " + str(start)
-			infStr += "\n"
-			print(infStr)
+				#if it is, get the range of shape indexes requested
+				if (len(inpArr) > 2) or not (inpArr[0].isnumeric() and inpArr[1].isnumeric()):
+					# a range consist of two numbers, return to the prompt if it isn't
+					print(invalidStr)
+					continue
+				#check that the indexes are in the correct range
+				start = int(inpArr[0])
+				stop = int(inpArr[1])
+				if (start < 1) or (start > shapeCount) or (stop < 1) or (stop > shapeCount):
+					#return to the prompt if they are not
+					print(outBoundStr)
+					continue
+				#rearrange the indexes if need be
+				if start > stop:
+					buf = start
+					start = stop
+					stop = buf
+				#check there are no more than thirty shapes
+				if start - stop + 1 > 30:
+					print(tooManyStr)
+					continue
+				#build the index list if all is good
+				indexList = list(range(start - 1, stop))
+			#if the instruction was neither a series or a range, check that it is a valid single
+			if not (isSeries or isRange):
+				if not inpStr.isnumeric():
+					print(invalidStr)
+					continue
+				index = int(inpStr)
+				if (index < 1) or (index > shapeCount):
+					print(outBoundStr)
+					continue
+				indexList = [index - 1]
 			#create a plot for all requested shapes
-			start -= 1
 			figList = []
-			for i in range(start, stop):
+			for index in indexList:
 				#create the data and populate it with the specified shape
-				axes = [shapeList[i][3], shapeList[i][2], shapeList[i][1]]
+				axes = [shapeList[index][3], shapeList[index][2], shapeList[index][1]]
 				data = empty(axes, dtype = bool)
 				pos = 0
-				for j in range(shapeList[i][3]):
-					for k in range(shapeList[i][2]):
-						for l in range(shapeList[i][1]):
-							data[j][k][l] = (shapeList[i][4][pos] == 1)
+				for j in range(shapeList[index][3]):
+					for k in range(shapeList[index][2]):
+						for l in range(shapeList[index][1]):
+							data[j][k][l] = (shapeList[index][4][pos] == 1)
 							pos += 1
 				data = data.transpose()
 				#build and show the plot
-				shapePlt = pyplot.figure().add_subplot(projection = "3d")
+				fig = pyplot.figure()
+				fig.canvas.manager.set_window_title("Shape " + str(index + 1))
+				shapePlt = fig.add_subplot(projection = "3d")
 				shapePlt.voxels(data)
 				shapePlt.set_aspect("equal", adjustable = "box")
 				shapePlt.view_init(100, 0)
