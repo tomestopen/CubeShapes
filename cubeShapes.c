@@ -10,6 +10,8 @@ static int dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5
 //function declarations
 static int GetCubeCount(CubeShape *source);
 static int GetShapeDictionarySize(int cubeCount);
+static int GetShapeConnectionValue(CubeShape *shape);
+static void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue);
 static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape);
 static int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *dimCmp, int dimCmpCount);
 static CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, int shapeCount);
@@ -30,7 +32,7 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 		return 1;
 	}
 	//if there is a source list, we take each member and try to find all possible shapes that can be created by adding one cube
-	int bwidth, bheight, bdepth, bsize, blx, bly, blz, vmove;
+	int bwidth, bheight, bdepth, bsize, blx, bly, blz;
 	int buf;
 	int dictLen;
 	int zMove, dblLine;
@@ -38,9 +40,8 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	int sourceConnectValue, connectValue;
 	int posCon[6];
 	int cubeCount;
-	int shellWeight, shellCount, shellCountNext;
-	int dimMov[3], dimLenC[3];
-	int i, j, k, l, m, n, o;
+	int dimMov[3];
+	int i, j, k, l, m, n;
 	char *box;
 	int shapeCount = 0;
 	CubeShape bufShape;
@@ -84,21 +85,11 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 			pos += dblLine;
 		}
 		//calculate the source connection value
-		sourceConnectValue = 0;
-		pos = 0;
-		for (i = 0; i < bdepth; i++){
-			for (j = 0; j < bheight; j++){
-				for (k = 0; k < bwidth; k++){
-					//for each space in the box, check if there is a cube present
-					if (box[pos]){
-						//if there is , add the connection value for this cube to the source connection value
-						sourceConnectValue += ((((posCon[0] = pos - 1) >= 0) && (box[posCon[0]])) + (((posCon[1] = pos + 1) < bsize) && (box[posCon[1]])) + (((posCon[2] = pos - bwidth) >= 0) && (box[posCon[2]])) + (((posCon[3] = pos + bwidth) < bsize) && (box[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (box[posCon[4]])) + (((posCon[5] = pos  + zMove) < bsize) && (box[posCon[5]])));
-					}
-					pos++;
-				}
-			}
-		}
-		sourceConnectValue = sourceConnectValue / 2; // as a connection always involve two cubes, divide by two to get the number of unique connections
+		bufShape.width = bwidth;
+		bufShape.height = bheight;
+		bufShape.depth = bdepth;
+		bufShape.shape = box;
+		sourceConnectValue = GetShapeConnectionValue(&bufShape);
 		//build the shape array for the potential shape
 		bufShape.shape = (char *) malloc(bsize);
 		//now we go through each cube of the creation box and try to find if one of its neighbour is not empty, at which point we create a new shape by adding a cube at the current position
@@ -187,60 +178,7 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 						//*******************
 						//shape value calculation
 						//*******************
-						//get the dimensions and moves of the new shape
-						dimMov[0] = 1; //width move
-						dimMov[1] = bufShape.width; //height move
-						dimMov[2] = bufShape.width * bufShape.height; //depth move
-						//the shape value is a combination of the total number of connections, the weighted difference between its dimensions and the cube shell sum
-						bufShape.value = sourceConnectValue + connectValue + (bufShape.width - bufShape.height) * 100 + (bufShape.width - bufShape.depth) * 50;
-						//the cube shell sum is the sum by dimension of all cubes in successive shells multiplied by the corresponding shell weight
-						for (l = 0; l < 3; l++){
-							//get the initial shell dimensions
-							dimLenC[0] = bufShape.width;
-							dimLenC[1] = bufShape.height;
-							dimLenC[2] = bufShape.depth;
-							//build successive shells within the box, and check how many cubes are in each shell
-							vmove = 1;
-							shellCount = cubeCount;
-							shellWeight = 7;
-							pos = 0;
-							while (vmove){
-								//check if the dimension length is greater than 2 if it is, subtract two to the dimension length and move the starting position by the dimension move value
-								vmove = 0;
-								if (dimLenC[l] > 2){
-									vmove += dimMov[l];
-									dimLenC[l] -= 2;
-								}
-								//if the dimension length was greater than 2, we can create at least one shell inside the current one
-								shellCountNext = 0;
-								if (vmove){
-									//go through the next shell and make a cube count
-									pos += vmove;
-									posC = posL = posF = pos;
-									for (m = 0; m < dimLenC[2]; m++){
-										for (n = 0; n < dimLenC[1]; n++){
-											for (o = 0; o < dimLenC[0]; o++){
-												shellCountNext += bufShape.shape[posC];
-												posC += dimMov[0];
-											}
-											//get the new "line" position in the shape box
-											posL += dimMov[1];
-											posC = posL;
-										}
-										//get the new "frame" position in the shape box
-										posF += dimMov[2];
-										posC = posL = posF;
-									}
-								}
-								//increase the shape value by the final cube count in the current shell (the number of cubes in the current shell minus the number of cubes in the next shell) times the shell weight
-								shellCount = shellCount - shellCountNext;
-								bufShape.value += (shellCount * shellWeight);
-								//increase the shell weight
-								shellWeight += 2;
-								//update the shell count for the next shell
-								shellCount = shellCountNext;
-							}
-						}
+						SetShapeValue(&bufShape, cubeCount, sourceConnectValue + connectValue);
 						//now that we have the shape value, check if it is unique
 						//*******************
 						//shape uniqueness check
@@ -283,7 +221,100 @@ int GetShapeDictionarySize(int cubeCount){
 	return dictLen;
 }
 
-static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
+int GetShapeConnectionValue(CubeShape *shape){
+	//this function returns the connection value for the given shape
+	int posCon[6];
+	int connectValue, size, zMove, pos;
+	int i, j, k;
+	pos = 0;
+	zMove = shape->width * shape->height;
+	size = zMove * shape->depth;
+	connectValue = 0;
+	for (i = 0; i < shape->depth; i++){
+		for (j = 0; j < shape->height; j++){
+			for (k = 0; k < shape->width; k++){
+				//for each space in the shape box, check if there is a cube present
+				if (shape->shape[pos]){
+					//if there is , add the sum of connections to all surrounding cubes to the connection value
+					connectValue += ((((posCon[0] = pos - 1) >= 0) && (shape->shape[posCon[0]])) + (((posCon[1] = pos + 1) < size) && (shape->shape[posCon[1]])) + (((posCon[2] = pos - shape->width) >= 0) && (shape->shape[posCon[2]])) + (((posCon[3] = pos + shape->width) < size) && (shape->shape[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (shape->shape[posCon[4]])) + (((posCon[5] = pos  + zMove) < size) && (shape->shape[posCon[5]])));
+				}
+				pos++;
+			}
+		}
+	}
+	connectValue = connectValue / 2; // as a connection always involve two cubes, divide by two to get the number of unique connections
+	return connectValue;
+}
+
+void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue){
+	//this function calculates ans sets the shape value for the supplied shape
+	int dimMov[3], dimLenC[3];
+	int pos, posC, posF, posL, vmove;
+	int shellWeight, shellCount, shellCountNext;
+	int i, j, k, l;
+	//get the dimensions and moves of the new shape
+	dimMov[0] = 1; //width move
+	dimMov[1] = shape->width; //height move
+	dimMov[2] = shape->width * shape->height; //depth move
+	//if the cube count is 0, calculate it
+	if (!cubeCount)
+		cubeCount = GetCubeCount(shape);
+	//if the connection value is 0, calculate it
+	if (!connectionValue)
+		connectionValue = GetShapeConnectionValue(shape);
+	//the shape value is a combination of its connection value, the weighted difference between its dimensions and the cube shell sum
+	shape->value = connectionValue + (shape->width - shape->height) * 100 + (shape->width - shape->depth) * 50;
+	//the cube shell sum is the sum by dimension of all cubes in successive shells multiplied by the corresponding shell weight
+	for (i = 0; i < 3; i++){
+		//get the initial shell dimensions
+		dimLenC[0] = shape->width;
+		dimLenC[1] = shape->height;
+		dimLenC[2] = shape->depth;
+		//build successive shells within the box, and check how many cubes are in each shell
+		vmove = 1;
+		shellCount = cubeCount;
+		shellWeight = 7;
+		pos = 0;
+		while (vmove){
+			//check if the dimension length is greater than 2 if it is, subtract two to the dimension length and move the starting position by the dimension move value
+			vmove = 0;
+			if (dimLenC[i] > 2){
+				vmove += dimMov[i];
+				dimLenC[i] -= 2;
+			}
+			//if the dimension length was greater than 2, we can create at least one shell inside the current one
+			shellCountNext = 0;
+			if (vmove){
+				//go through the next shell and make a cube count
+				pos += vmove;
+				posC = posL = posF = pos;
+				for (j = 0; j < dimLenC[2]; j++){
+					for (k = 0; k < dimLenC[1]; k++){
+						for (l = 0; l < dimLenC[0]; l++){
+							shellCountNext += shape->shape[posC];
+							posC += dimMov[0];
+						}
+						//get the new "line" position in the shape box
+						posL += dimMov[1];
+						posC = posL;
+					}
+					//get the new "frame" position in the shape box
+					posF += dimMov[2];
+					posC = posL = posF;
+				}
+			}
+			//increase the shape value by the final cube count in the current shell (the number of cubes in the current shell minus the number of cubes in the next shell) times the shell weight
+			shellCount = shellCount - shellCountNext;
+			shape->value += (shellCount * shellWeight);
+			//increase the shell weight
+			shellWeight += 2;
+			//update the shell count for the next shell
+			shellCount = shellCountNext;
+		}
+	}
+}
+
+int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
 	//this function checks whether the new shape already exists in the provided dictionary, and adds it if it doesn't
 	int buf, count, match, adjValue;
 	CubeShape *shape;
