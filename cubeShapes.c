@@ -5,7 +5,7 @@
 //external variables
 static int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1, 1, -1}, {-1, 1, -1}, {1, -1, -1}, {-1, -1, -1}};
 static int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
-static int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 4, 6}, {0, 1, 5, 6}, {1, 2, 4, 7}};
+static int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 5, 6}, {0, 3, 5, 6}, {1, 2, 4, 7}};
 static int dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5}, dimCmpHD[] = {0, 1};
 //function declarations
 static int GetCubeCount(CubeShape *source);
@@ -312,7 +312,7 @@ static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
 			if (newShape->width == newShape->depth){
 				//if the width is equal to the depth as well, all three dimensions are equal, and we must make a comparison for all dimension orders
 				dimCmp = dimCmpWHD;
-				count = 5;
+				count = 6;
 			}
 			else {
 				//if they are not equal, we only need to check the dimension orders where width = width and width = height
