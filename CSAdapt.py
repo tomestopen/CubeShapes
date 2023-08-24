@@ -38,6 +38,13 @@ class CubeShapesSL:
 			#load the clean shape list function
 			self.cleanShapeList = self.SL.CleanShapeList
 			self.cleanShapeList.argtypes = [POINTER(CubeShape), c_int]
+			#load the compare shape list function
+			self.compareShapeLists = self.SL.CompareShapeLists
+			self.compareShapeLists.argtypes = [POINTER(CubeShape), c_int, POINTER(CubeShape), c_int, POINTER(CubeShape)]
+			self.compareShapeLists.restype = c_int
+			#load the set shape list values function
+			self.setShapeListValues = self.SL.SetShapeListValues
+			self.setShapeListValues.argtypes = [POINTER(CubeShape), c_int]
 			#load the multi threaded get descendents function, (if on windows)
 			if system == "Windows":
 				self.getDescendentsMulti = self.SL.GetDescendentsMulti

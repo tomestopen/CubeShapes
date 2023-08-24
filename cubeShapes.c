@@ -15,6 +15,7 @@ static void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue);
 static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape);
 static int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *dimCmp, int dimCmpCount);
 static CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, int shapeCount);
+static void CleanShapeDictionary(void **shapeDictionary, int dictionarySize);
 
 int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	//this function returns all unique cube shapes descended from all the source cubes shapes
@@ -517,6 +518,74 @@ void CleanShapeList(CubeShape *shapeList, int shapeCount){
 	}
 	//clean the shape list
 	free((void *) shapeList);
+}
+
+void CleanShapeDictionary(void **shapeDictionary, int dictionarySize){
+	//this function goes through the provided dictionary and frees up all the links
+	void **link, **linkP;
+	for (int i = 0; i < dictionarySize; i++){
+		if (shapeDictionary[i]){
+			link = (void **) shapeDictionary[i];
+			while (link){
+				free(link[0]);
+				linkP = link;
+				link = (void **) link[1];
+				free((void *) linkP);
+			}
+		}
+	}
+	free((void *) shapeDictionary);
+}
+
+int CompareShapeLists(CubeShape *sourceList, int sourceLength, CubeShape *targetList, int targetLength, CubeShape *missingList){
+	//this function finds all the shapes from the target list that are missing in the source list
+	int dictLen, missingCount, cubeCount, count;
+	void **shapeDict;
+	int i, j;
+	//create the shape dictionary and set all entries to 0
+	cubeCount = GetCubeCount(sourceList);
+	dictLen = GetShapeDictionarySize(cubeCount);
+	shapeDict = (void **) malloc(sizeof(void *) * dictLen);
+	for (i = 0; i < dictLen; i++){
+		shapeDict[i] = 0;
+	}
+	//add all source list entries
+	for (i = 0; i < sourceLength; i++){
+		if (!sourceList[i].value) SetShapeValue(&sourceList[i], cubeCount, 0); //calculate the shape value if it hasn't one
+		AddUniqueShape(shapeDict, &sourceList[i]);
+	}
+	//go through the target list and try to add each shape to the dictionary
+	missingCount = 0;
+	for (i = 0; i < targetLength; i++){
+		if (!targetList[i].value) SetShapeValue(&targetList[i], cubeCount, 0); //calculate the shape value if it hasn't one
+		if (AddUniqueShape(shapeDict, &targetList[i])){
+			//if the shape was successfully added to the dictionary, it wasn't present in the source list, copy it to the missing list
+			missingList[missingCount].value = targetList[i].value;
+			missingList[missingCount].width = targetList[i].width;
+			missingList[missingCount].height = targetList[i].height;
+			missingList[missingCount].depth = targetList[i].depth;
+			count = missingList[missingCount].width * missingList[missingCount].height * missingList[missingCount].depth;
+			for (j = 0; j < count; j++){
+				missingList[missingCount].shape[j] = targetList[i].shape[j];
+			}
+			missingCount++;
+		}
+	}
+	//clean up the shape dictionary
+	CleanShapeDictionary(shapeDict, dictLen);
+	//return the missing count
+	return missingCount;
+}
+
+void SetShapeListValues(CubeShape *shapeList, int listLength){
+	//this function calculates and sets the shape value for each shape in the shape list
+	int cubeCount;
+	//get the cube count for the shapes
+	cubeCount = GetCubeCount(shapeList);
+	//set the shape value for each shape
+	for (int i = 0; i < listLength; i++){
+		SetShapeValue(&shapeList[i], cubeCount, 0);
+	}
 }
 
 #ifdef BUILD_DLL
