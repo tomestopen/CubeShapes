@@ -1,10 +1,17 @@
 import os
 import pathlib
-from numpy import empty
+import numpy
+from CSAdapt import CubeShape, CubeShapesSL
+from ctypes import c_char
+from shapeFinder import ShapeFinder
 from matplotlib import pyplot
 
 class ShapeVision:
 	def __init__(self):
+		#get the cube shapes library
+		self.CSSL = CubeShapesSL()
+		#add class function shortcuts
+		self.view = ShapeVision.view
 		#find current directory path
 		sourcePath = pathlib.Path(__file__).parent.absolute()
 		#check that the shapes directory exists
@@ -13,37 +20,70 @@ class ShapeVision:
 		if not self.isValid:
 			print("shape folder not present. impossible to find shapes")
 
-	def view(self, cubeCount):
-		#this function is used to view cube shapes for the specified cube count
+	def viewArchive(self, cubeCount):
+		#this function is used to view cube shapes from the archive of the specified cube count
 		if not self.isValid:
 			print("shape folder not present. impossible to find shapes")
 			return
 		#try to find the shape file for the specified cube count
-		shapeFilePath = os.path.join(self.shapeDirPath, "shapes_" + str(cubeCount) + ".txt")
-		if not os.path.isfile(shapeFilePath):
+		shapeFilePath = ShapeFinder.getArchivePath(cubeCount, self.shapeDirPath)
+		if shapeFilePath is None:
 			print("No shape file for the specified cube count")
 			return
-		#if a shape file was found load it into a list
-		shapeList = []
-		with open(shapeFilePath, "r") as file:
-			lines = list(file)
-			if len(lines[0]) > 0:
-				for line in lines:
-					#each line of the shape file represents a shape object
-					text = line.strip().split(";") #split the line by semicolon
-					shape = [0, 0, 0, 0, []]
-					shape[0] = int(text[0]) #the first element of the line is the shape value
-					shape[1] = int(text[1]) #the second element is the width
-					shape[2] = int(text[2]) #the third element is the height
-					shape[3] = int(text[3]) #the fourth element is the depth
-					#the fifth element is the actual representation of the shape, as a string of ones and zeros
-					for c in text[4]:
-						shape[4].append(int(c))
-					shapeList.append(shape)
+		#load the archive into a shape list
+		shapeList = ShapeFinder.loadTextArchive(shapeFilePath, False)
+		#launch the view function
+		self.view(shapeList)
+
+	def loadNumpyArchive(self, archivePath, asCArray = True):
+		#this function loads a numpy file and converts it into a shape list or array
+		if not os.path.isfile(archivePath):
+			#if the numpy file does not exist, exit immediately
+			return None
+		#otherwise load the file
+		npShapeData = numpy.load(archivePath, allow_pickle = True)
+		#get the number of shapes in the archive
+		shapeCount = len(npShapeData)
+		#create a cube shape array and load it with the numpy data
+		shapeArr = (CubeShape * shapeCount)()
+		#go through the data and load each data point into a cube shape
+		for i in range(shapeCount):
+			#if necessary rearrange the axes so that the width (deepest level of the array) is bigger than the height (mid level of the array) and the height is bigger than the depth (top level)
+			checkSwap = True
+			while checkSwap:
+				checkSwap = False
+				if len(npShapeData[i]) > len(npShapeData[i][0]):
+					npShapeData[i] = numpy.swapaxes(npShapeData[i],0,1)
+					checkSwap = True
+				if len(npShapeData[i][0]) > len(npShapeData[i][0][0]):
+					npShapeData[i] = numpy.swapaxes(npShapeData[i],1,2)
+					checkSwap = True
+			#copy the data into its corresponding shape array
+			shapeArr[i].depth = len(npShapeData[i])
+			shapeArr[i].height = len(npShapeData[i][0])
+			shapeArr[i].width = len(npShapeData[i][0][0])
+			size = shapeArr[i].width * shapeArr[i].height * shapeArr[i].depth
+			shapeArr[i].shape = (c_char * size)()
+			pos = 0
+			for j in range(shapeArr[i].depth):
+				for k in range(shapeArr[i].height):
+					for l in range(shapeArr[i].width):
+						shapeArr[i].shape[pos] = int(npShapeData[i][j][k][l])
+						pos += 1
+		#set the shape values
+		self.CSSL.setShapeListValues(shapeArr, shapeCount)
+		#return either the array or a list
+		if asCArray:
+			return shapeArr
+		else:
+			return ShapeFinder.shapeArrayToList(shapeArr)
+
+	def view(shapeList):
+		#this function is used to view cube shapes for the specified cube count
 		shapeCount = len(shapeList)
 		#inform the user of the number of shapes and ask for instructions
 		infoStr = "-------------------------------------\n"
-		infoStr += "There " + ("are " if shapeCount > 1 else "is ") + str(shapeCount) + " shapes with a cube count of " + str(cubeCount) + "\n"
+		infoStr += "There " + ("are " if shapeCount > 1 else "is ") + str(shapeCount) + " shapes\n"
 		infoStr += "-------------------------------------\n"
 		infoStr += "Type the number of the shape you want.\n"
 		infoStr += "You can request several shapes by typing their numbers separated by spaces.\n"
@@ -136,7 +176,7 @@ class ShapeVision:
 			for index in indexList:
 				#create the data and populate it with the specified shape
 				axes = [shapeList[index][3], shapeList[index][2], shapeList[index][1]]
-				data = empty(axes, dtype = bool)
+				data = numpy.empty(axes, dtype = bool)
 				pos = 0
 				for j in range(shapeList[index][3]):
 					for k in range(shapeList[index][2]):
