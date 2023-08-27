@@ -38,6 +38,7 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	int dictLen;
 	int zMove, dblLine;
 	int pos, posC, posS, posF, posL;
+	int frameStart, frameEnd, lineStart, lineEnd;
 	int sourceConnectValue, connectValue;
 	int posCon[6];
 	int cubeCount;
@@ -95,14 +96,18 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 		bufShape.shape = (char *) malloc(bsize);
 		//now we go through each cube of the creation box and try to find if one of its neighbour is not empty, at which point we create a new shape by adding a cube at the current position
 		posS = -1;
+		frameStart = 0;
+		frameEnd = zMove;
 		for (i = 0; i < bdepth; i++){
+			lineStart = frameStart;
+			lineEnd = lineStart + bwidth;
 			for (j = 0; j < bheight; j++){
 				for (k = 0; k < bwidth; k++){
 					posS++;
 					//if there is already a cube at the current position, move on to the next
 					if (box[posS]) continue;
 					//if there is no cube at the current position check if there is a cube in any of the six neighbouring positions, and record how many connections the new cube would have
-					connectValue = ((((posCon[0] = posS - 1) >= 0) && (box[posCon[0]])) + (((posCon[1] = posS + 1) < bsize) && (box[posCon[1]])) + (((posCon[2] = posS - bwidth) >= 0) && (box[posCon[2]])) + (((posCon[3] = posS + bwidth) < bsize) && (box[posCon[3]])) + (((posCon[4] = posS - zMove) >= 0) && (box[posCon[4]])) + (((posCon[5] = posS  + zMove) < bsize) && (box[posCon[5]])));
+					connectValue = ((((posCon[0] = posS - 1) >= lineStart) && (box[posCon[0]])) + (((posCon[1] = posS + 1) < lineEnd) && (box[posCon[1]])) + (((posCon[2] = posS - bwidth) >= frameStart) && (box[posCon[2]])) + (((posCon[3] = posS + bwidth) < frameEnd) && (box[posCon[3]])) + (((posCon[4] = posS - zMove) >= 0) && (box[posCon[4]])) + (((posCon[5] = posS  + zMove) < bsize) && (box[posCon[5]])));
 					//if there is at least one connection  (a neighbouring cube) create a new shape
 					if (connectValue){
 						//if there is, create a new shape
@@ -188,7 +193,13 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 						shapeCount += AddUniqueShape(shapeDict, &bufShape);
 					}
 				}
+				//increment line start and end
+				lineStart += bwidth;
+				lineEnd += bwidth;
 			}
+			//increment frame start and end
+			frameStart += zMove;
+			frameEnd += zMove;
 		}
 		//clean up the creation box and potential shape array
 		free(box);
@@ -226,22 +237,33 @@ int GetShapeConnectionValue(CubeShape *shape){
 	//this function returns the connection value for the given shape
 	int posCon[6];
 	int connectValue, size, zMove, pos;
+	int frameStart, frameEnd, lineStart, lineEnd;
 	int i, j, k;
 	pos = 0;
 	zMove = shape->width * shape->height;
 	size = zMove * shape->depth;
 	connectValue = 0;
+	frameStart = 0;
+	frameEnd = zMove;
 	for (i = 0; i < shape->depth; i++){
+		lineStart = frameStart;
+		lineEnd = lineStart + shape->width;
 		for (j = 0; j < shape->height; j++){
 			for (k = 0; k < shape->width; k++){
 				//for each space in the shape box, check if there is a cube present
 				if (shape->shape[pos]){
 					//if there is , add the sum of connections to all surrounding cubes to the connection value
-					connectValue += ((((posCon[0] = pos - 1) >= 0) && (shape->shape[posCon[0]])) + (((posCon[1] = pos + 1) < size) && (shape->shape[posCon[1]])) + (((posCon[2] = pos - shape->width) >= 0) && (shape->shape[posCon[2]])) + (((posCon[3] = pos + shape->width) < size) && (shape->shape[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (shape->shape[posCon[4]])) + (((posCon[5] = pos  + zMove) < size) && (shape->shape[posCon[5]])));
+					connectValue += ((((posCon[0] = pos - 1) >= lineStart) && (shape->shape[posCon[0]])) + (((posCon[1] = pos + 1) < lineEnd) && (shape->shape[posCon[1]])) + (((posCon[2] = pos - shape->width) >= frameStart) && (shape->shape[posCon[2]])) + (((posCon[3] = pos + shape->width) < frameEnd) && (shape->shape[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (shape->shape[posCon[4]])) + (((posCon[5] = pos  + zMove) < size) && (shape->shape[posCon[5]])));
 				}
 				pos++;
 			}
+			//increment line start and end
+			lineStart += shape->width;
+			lineEnd += shape->width;
 		}
+		//increment frame start and end
+		frameStart += zMove;
+		frameEnd += zMove;
 	}
 	connectValue = connectValue / 2; // as a connection always involve two cubes, divide by two to get the number of unique connections
 	return connectValue;
