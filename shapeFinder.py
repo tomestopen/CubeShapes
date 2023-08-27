@@ -15,7 +15,10 @@ class ShapeFinder:
 		#add class function shortcuts
 		self.getArchivePath = ShapeFinder.getArchivePath
 		self.shapeArrayToList = ShapeFinder.shapeArrayToList
+		self.atol = ShapeFinder.shapeArrayToList
 		self.loadTextArchive = ShapeFinder.loadTextArchive
+		self.saveTextArchive = ShapeFinder.saveTextArchive
+		self.extract = ShapeFinder.extract
 		#check that the shapes directory exists, create it if it doesn't
 		self.shapeDirPath = os.path.join(sourcePath, "shapes/")
 		if not os.path.isdir(self.shapeDirPath):
@@ -73,20 +76,13 @@ class ShapeFinder:
 				time = round(time, 1)
 			else:
 				time = round(time)
-			#create a file and copy the descendent shapes into it
-			shapeFilePath = os.path.join(self.shapeDirPath, "shapes_" + str(cubeCountP) + ".txt")
-			with open(shapeFilePath, "w") as file:
-				for i in range(descCount):
-					count = descList[i].width * descList[i].height * descList[i].depth
-					shapeStr = ""
-					for j in range(count):
-						shapeStr += str(int.from_bytes(descList[i].shape[j], "little"))
-					file.write(str(descList[i].value) + ";" + str(descList[i].width) + ";" + str(descList[i].height) + ";" + str(descList[i].depth) + ";" + shapeStr + "\n")
+			#create a shape archive for the descendents list
+			self.saveArchive(descList, "shapes_" + str(cubeCountP), descCount)
 			#set the new source shapes as the current descendents
 			sourceList = descList
 			sourceShapeCount = descCount
 			#warn the user the file was created
-			print("Created shape file for cube count " + str(cubeCountP) + " at " + shapeFilePath + " in " + str(time) + " seconds")
+			print("Created shape file for cube count " + str(cubeCountP) + " in " + str(time) + " seconds")
 			cubeCountP += 1
 		#clean up the descendent shape array
 		self.CSSL.cleanShapeList(descList, descCount)
@@ -116,6 +112,19 @@ class ShapeFinder:
 			for j in range(length):
 				missingShapeArrFinal[i].shape[j] = missingShapeArr[i].shape[j]
 		return missingShapeArrFinal
+
+	def loadArchive(self, cubeCount, asCArray = True):
+		#this function tries to find the text archive for the specified cube count,and returns a cube shape array with its data if found
+		shapeFilePath = self.getArchivePath(cubeCount, self.shapeDirPath)
+		if shapeFilePath is None:
+			print("No archive file found for cube count " + str(cubeCount))
+			return None
+		return self.loadTextArchive(shapeFilePath, asCArray)
+
+	def saveArchive(self, shapeList, fileName, shapeCount = 0):
+		#this function saves the shape list in the archive folder, under the given file name
+		shapeFilePath = os.path.join(self.shapeDirPath, fileName + ".txt")
+		self.saveTextArchive(shapeList, shapeFilePath, shapeCount)
 
 	def getArchivePath(cubeCount, shapeDirPath = None):
 		#this function attempts to find the archive file path for the given cube count
@@ -186,3 +195,49 @@ class ShapeFinder:
 			return sourceShapeArr
 		else:
 			return shapeList
+
+	def saveTextArchive(shapeList, shapeFilePath, shapeCount = 0):
+		#this function creates a shape archive file at the specified path and copies the shape list information into it
+		if (shapeCount == 0): shapeCount = len(shapeList)
+		with open(shapeFilePath, "w") as file:
+			for i in range(shapeCount):
+				count = shapeList[i].width * shapeList[i].height * shapeList[i].depth
+				shapeStr = ""
+				for j in range(count):
+					shapeStr += str(int.from_bytes(shapeList[i].shape[j], "little"))
+				file.write(str(shapeList[i].value) + ";" + str(shapeList[i].width) + ";" + str(shapeList[i].height) + ";" + str(shapeList[i].depth) + ";" + shapeStr + "\n")
+
+	def extract(shapeList, value = 0, width = 0, height = 0, depth = 0):
+		#this function attempts to crate a list of shapes in the supplied shape list that match the specified characteristics
+		matchValue = (value > 0)
+		matchWidth = (width > 0)
+		matchHeight = (height > 0)
+		matchDepth = (depth > 0)
+		#check that there is at least one extraction criterion
+		if not (matchValue or matchWidth or matchHeight or matchDepth):
+			print("Specify at least one extraction criterion")
+			return None
+		#go through the shape list and retrieve all shapes that match the criteria
+		matchList = []
+		shapeCount = len(shapeList)
+		for i in range(shapeCount):
+			if not ((matchValue and (shapeList[i].value != value)) or (matchWidth and (shapeList[i].width != width)) or (matchHeight and (shapeList[i].height != height)) or (matchDepth and (shapeList[i].depth != depth))):
+				#if the shape does not differ from any criterion, add it to the match list
+				matchList.append(shapeList[i])
+		#check that there is at least one match
+		matchCount = len(matchList)
+		if matchCount == 0:
+			print("There is no shape matching your criteria in this list")
+			return None
+		#build the extracted shape list and return it
+		extractArr = (CubeShape * matchCount)()
+		for i in range(matchCount):
+			extractArr[i].value = matchList[i].value
+			extractArr[i].width = matchList[i].width
+			extractArr[i].height = matchList[i].height
+			extractArr[i].depth = matchList[i].depth
+			length = extractArr[i].width * extractArr[i].height * extractArr[i].depth
+			extractArr[i].shape = (c_char * length)()
+			for j in range(length):
+				extractArr[i].shape[j] = matchList[i].shape[j]
+		return extractArr
