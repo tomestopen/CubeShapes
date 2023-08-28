@@ -45,6 +45,10 @@ class CubeShapesSL:
 			#load the set shape list values function
 			self.setShapeListValues = self.SL.SetShapeListValues
 			self.setShapeListValues.argtypes = [POINTER(CubeShape), c_int]
+			#load the check distinct function
+			self.checkDistinct = self.SL.CheckDistinct
+			self.checkDistinct.argtypes = [POINTER(CubeShape), POINTER(CubeShape)]
+			self.checkDistinct.restype = c_int
 			#load the multi threaded get descendents function, (if on windows)
 			if system == "Windows":
 				self.getDescendentsMulti = self.SL.GetDescendentsMulti

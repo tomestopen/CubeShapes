@@ -610,6 +610,53 @@ void SetShapeListValues(CubeShape *shapeList, int listLength){
 	}
 }
 
+int CheckDistinct(CubeShape *firstShape, CubeShape *secondShape){
+	//this function checks whether the first and second shape are distinct
+	int corner[8];
+	int *dimCmp;
+	int count;
+	//check that the characteristics of both shapes are the same
+	if (!((firstShape->value == secondShape->value) && (firstShape->width == secondShape->width) && (firstShape->height == secondShape->height) && (firstShape->depth == secondShape->depth)))
+		return 1; //if they don't, immediately return that they are distinct
+	//otherwise calculate the corners of the first shape box
+	count = firstShape->width * (firstShape->height - 1);
+	corner[0] = 0;
+	corner[1] = corner[0] + firstShape->width - 1; //upper right front corner
+	corner[2] = corner[0] + count; //lower left front corner
+	corner[3] = corner[1] + count; //lower right front corner
+	count = (firstShape->width * firstShape->height) * (firstShape->depth - 1);
+	corner[4] = corner[0] + count; //upper left back corner
+	corner[5] = corner[1] + count; //upper right back corner
+	corner[6] = corner[2] + count; //lower left back corner
+	corner[7] = corner[3] + count; //lower right back corner
+	//the checks we must do depend on how many dimensions are of the same length
+	if (firstShape->width == firstShape->height){
+		//if the width is equal to the height, the number of comparisons depend on whether the width is also equal to the depth
+		if (firstShape->width == firstShape->depth){
+			//if the width is equal to the depth as well, all three dimensions are equal, and we must make a comparison for all dimension orders
+			dimCmp = dimCmpWHD;
+			count = 6;
+		}
+		else {
+			//if they are not equal, we only need to check the dimension orders where width = width and width = height
+			dimCmp = dimCmpWH;
+			count = 2;
+		}
+	}
+	else if (firstShape->height == firstShape->depth){
+		//if the width is not equal to the height, but the height is equal to the depth, check the dimension orders where height = height and height = depth
+		dimCmp = dimCmpHD;
+		count = 2;
+	}
+	else {
+		//otherwise, simply compare them when the dimension order is the same
+		dimCmp = dimCmpN;
+		count = 1;
+	}
+	//finally return the inverse of the match function
+	return !ShapeMatch(firstShape, secondShape, corner, dimCmp, count);
+}
+
 #ifdef BUILD_DLL
 
 typedef struct sWorkData {
