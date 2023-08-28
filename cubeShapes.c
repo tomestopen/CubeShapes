@@ -134,8 +134,9 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 						//reorganise the shape so that the longest dimension becomes the width, the second longest becomes the height, and the shortest becomes depth, and define the dimension moves accordingly
 						if (bufShape.height > bufShape.width){
 							dimMov[0] = bwidth;
-							dimMov[1] = 1;
+							dimMov[1] = -1;
 							dimMov[2] = zMove;
+							posF += (bufShape.width - 1);
 							buf = bufShape.width;
 							bufShape.width = bufShape.height;
 							bufShape.height = buf;
@@ -149,9 +150,10 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 							bufShape.depth = buf;
 						}
 						else if (bufShape.depth > bufShape.height){
-							dimMov[0] = 1;
+							dimMov[0] = -1;
 							dimMov[1] = zMove;
 							dimMov[2] = bwidth;
+							posF += (bufShape.width - 1);
 							buf = bufShape.height;
 							bufShape.height = bufShape.depth;
 							bufShape.depth = buf;
