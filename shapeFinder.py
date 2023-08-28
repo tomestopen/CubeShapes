@@ -113,6 +113,33 @@ class ShapeFinder:
 				missingShapeArrFinal[i].shape[j] = missingShapeArr[i].shape[j]
 		return missingShapeArrFinal
 
+	def getShapeDescendents(self, shape):
+		#this function returns an array containing the descendents of the given shape
+		descArr = POINTER(CubeShape)()
+		descCount = self.CSSL.getDescendents(pointer(descArr), pointer(shape), 1)
+		#check if the shape has any descendents
+		if descCount == 0:
+			return None
+		#create a new descendent array
+		descArrFinal = (CubeShape * descCount)()
+		for i in range(descCount):
+			descArrFinal[i].value = descArr[i].value
+			descArrFinal[i].width = descArr[i].width
+			descArrFinal[i].height = descArr[i].height
+			descArrFinal[i].depth = descArr[i].depth
+			length = descArrFinal[i].width * descArrFinal[i].height * descArrFinal[i].depth
+			descArrFinal[i].shape = (c_char * length)()
+			for j in range(length):
+				descArrFinal[i].shape[j] = descArr[i].shape[j]
+		#clean up the descendent array
+		self.CSSL.cleanShapeList(descArr, descCount)
+		return descArrFinal
+
+	def checkDistinct(self, firstShape, secondShape):
+		#this function checks whether the fist shape is different from the second shape
+		disVal = self.CSSL.checkDistinct(pointer(firstShape), pointer(secondShape))
+		return (disVal == 1)
+
 	def loadArchive(self, cubeCount, asCArray = True):
 		#this function tries to find the text archive for the specified cube count,and returns a cube shape array with its data if found
 		shapeFilePath = self.getArchivePath(cubeCount, self.shapeDirPath)
