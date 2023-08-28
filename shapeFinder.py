@@ -1,6 +1,7 @@
 import os
 import pathlib
 import time
+import sys
 from CSAdapt import CubeShape, CubeShapesSL
 from ctypes import POINTER, pointer, c_char, cast
 from datetime import datetime, timezone
@@ -268,3 +269,10 @@ class ShapeFinder:
 			for j in range(length):
 				extractArr[i].shape[j] = matchList[i].shape[j]
 		return extractArr
+
+if __name__ == '__main__':
+	if (len(sys.argv) != 2) or (not sys.argv[1].isnumeric()):
+		print("You must give as an argument the cube count of the shapes you want to find.")
+	else:
+		sf = ShapeFinder()
+		sf.find(int(sys.argv[1]))

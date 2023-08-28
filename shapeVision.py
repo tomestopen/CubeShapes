@@ -1,6 +1,7 @@
 import os
 import pathlib
 import numpy
+import sys
 from CSAdapt import CubeShape, CubeShapesSL
 from ctypes import c_char
 from shapeFinder import ShapeFinder
@@ -197,3 +198,10 @@ class ShapeVision:
 			#clean up figures
 			for fig in figList:
 				fig.clear()
+
+if __name__ == '__main__':
+	if (len(sys.argv) != 2) or (not sys.argv[1].isnumeric()):
+		print("You must give as an argument the cube count of the shapes you want to see.")
+	else:
+		sv = ShapeVision()
+		sv.viewArchive(int(sys.argv[1]))
