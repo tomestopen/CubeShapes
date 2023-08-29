@@ -7,6 +7,7 @@ static int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1
 static int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
 static int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 5, 6}, {0, 3, 5, 6}, {1, 2, 4, 7}};
 static int dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5}, dimCmpHD[] = {0, 1};
+static int dimOrderVal[3][2] = {{1, 2}, {0, 2}, {0, 1}};
 //function declarations
 static int GetCubeCount(CubeShape *source);
 static int GetShapeDictionarySize(int cubeCount);
@@ -273,11 +274,16 @@ int GetShapeConnectionValue(CubeShape *shape){
 
 void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue){
 	//this function calculates ans sets the shape value for the supplied shape
-	int dimMov[3], dimLenC[3];
-	int pos, posC, posF, posL, vmove;
-	int shellWeight, shellCount, shellCountNext;
+	int dimMov[3], dimLen[3];
+	int dimLenC;
+	int posC, posL;
+	int startPos[2];
+	int shellWeight, shellCount, shellCountAll;
 	int i, j, k, l;
 	//get the dimensions and moves of the new shape
+	dimLen[0] = shape->width;
+	dimLen[1] = shape->height;
+	dimLen[2] = shape->depth;
 	dimMov[0] = 1; //width move
 	dimMov[1] = shape->width; //height move
 	dimMov[2] = shape->width * shape->height; //depth move
@@ -291,51 +297,43 @@ void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue){
 	shape->value = connectionValue + (shape->width - shape->height) * 100 + (shape->width - shape->depth) * 50;
 	//the cube shell sum is the sum by dimension of all cubes in successive shells multiplied by the corresponding shell weight
 	for (i = 0; i < 3; i++){
-		//get the initial shell dimensions
-		dimLenC[0] = shape->width;
-		dimLenC[1] = shape->height;
-		dimLenC[2] = shape->depth;
+		//store the dimension we need to keep track of
+		dimLenC = dimLen[i];
 		//build successive shells within the box, and check how many cubes are in each shell
-		vmove = 1;
-		shellCount = cubeCount;
+		shellCountAll = 0;
 		shellWeight = 7;
-		pos = 0;
-		while (vmove){
-			//check if the dimension length is greater than 2 if it is, subtract two to the dimension length and move the starting position by the dimension move value
-			vmove = 0;
-			if (dimLenC[i] > 2){
-				vmove += dimMov[i];
-				dimLenC[i] -= 2;
-			}
-			//if the dimension length was greater than 2, we can create at least one shell inside the current one
-			shellCountNext = 0;
-			if (vmove){
-				//go through the next shell and make a cube count
-				pos += vmove;
-				posC = posL = posF = pos;
-				for (j = 0; j < dimLenC[2]; j++){
-					for (k = 0; k < dimLenC[1]; k++){
-						for (l = 0; l < dimLenC[0]; l++){
-							shellCountNext += shape->shape[posC];
-							posC += dimMov[0];
-						}
-						//get the new "line" position in the shape box
-						posL += dimMov[1];
-						posC = posL;
+		startPos[0] = 0; //this is the starting position of the "left" shell
+		startPos[1] = dimMov[i] * (dimLenC - 1); //this is the starting position of the "right" shell
+		while (1){
+			//if the current dimension length is less than 2, we cannot create a new shell and exit
+			if (dimLenC <= 2) break;
+			//go through both current shells and count all the cubes
+			shellCount = 0;
+			for (j = 0; j < 2; j++){
+				posC = posL = startPos[j];
+				for (k = 0; k < dimLen[dimOrderVal[i][0]]; k++){
+					for (l = 0; l < dimLen[dimOrderVal[i][1]]; l++){
+						shellCount += shape->shape[posC];
+						posC += dimMov[dimOrderVal[i][1]];
 					}
-					//get the new "frame" position in the shape box
-					posF += dimMov[2];
-					posC = posL = posF;
+					posL += dimMov[dimOrderVal[i][0]];
+					posC = posL;
 				}
 			}
-			//increase the shape value by the final cube count in the current shell (the number of cubes in the current shell minus the number of cubes in the next shell) times the shell weight
-			shellCount = shellCount - shellCountNext;
+			//add the shell count for this shell to the total shell cube count
+			shellCountAll += shellCount;
+			//add the shell count multiplied by the shell weight to the shape value
 			shape->value += (shellCount * shellWeight);
+			//subtract two to the dimension length
+			dimLenC -= 2;
+			//adjust the starting positions
+			startPos[0] += dimMov[i];
+			startPos[1] -= dimMov[i];
 			//increase the shell weight
 			shellWeight += 2;
-			//update the shell count for the next shell
-			shellCount = shellCountNext;
 		}
+		//add the shell value of the last shell to the shape value
+		shape->value += ((cubeCount - shellCountAll) * shellWeight);
 	}
 }
 
