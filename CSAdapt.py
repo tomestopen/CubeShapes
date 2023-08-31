@@ -5,7 +5,7 @@ from ctypes import Structure, c_int, c_char, c_ubyte, POINTER, CDLL
 
 class CubeShape(Structure):
 	#this class represents a cube shape structure in the shared library
-	_fields_ = [("value", c_int), ("width", c_int), ("height", c_int), ("depth", c_int), ("shape", POINTER(c_char))]
+	_fields_ = [("box", POINTER(c_char)), ("value", c_int), ("edgeValue", c_int), ("connections", c_int), ("width", c_int), ("height", c_int), ("depth", c_int), ]
 
 class CubeShapesSL:
 	#this class is used to access the functions in the shared library

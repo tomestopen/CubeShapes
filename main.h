@@ -6,11 +6,13 @@
 	#include <stdint.h>
 
 	typedef struct sCubeShape {
+			char *box;
 			int value;
+			int edgeValue;
+			int connections;
 			int width;
 			int height;
 			int depth;
-			char *shape;
 		} CubeShape;
 
 	#ifdef BUILD_DLL

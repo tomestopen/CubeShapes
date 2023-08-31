@@ -7,12 +7,11 @@ static int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1
 static int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
 static int dimCorner[6][4] = {{0, 3, 5, 6}, {1, 2, 4, 7}, {1, 2, 4, 7}, {0, 3, 5, 6}, {0, 3, 5, 6}, {1, 2, 4, 7}};
 static int dimCmpN[] = {0}, dimCmpWH[] = {0, 2}, dimCmpWHD[] = {0, 1, 2, 3, 4, 5}, dimCmpHD[] = {0, 1};
-static int dimOrderVal[3][2] = {{1, 2}, {0, 2}, {0, 1}};
 //function declarations
 static int GetCubeCount(CubeShape *source);
 static int GetShapeDictionarySize(int cubeCount);
-static int GetShapeConnectionValue(CubeShape *shape);
-static void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue);
+static void SetShapeConnections(CubeShape *shape);
+static void SetShapeValue(CubeShape *shape);
 static int AddUniqueShape(void **shapeDictionary, CubeShape *newShape);
 static int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *dimCmp, int dimCmpCount);
 static CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, int shapeCount);
@@ -20,35 +19,38 @@ static void CleanShapeDictionary(void **shapeDictionary, int dictionarySize);
 
 int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	//this function returns all unique cube shapes descended from all the source cubes shapes
-	CubeShape *descArr;
-	//first check that there is a source list, and return the cube shape for one cube if there isn't
-	if (!source || !sourceCount){
-		descArr = (CubeShape *) malloc(sizeof(CubeShape));
-		descArr->value = 7;
-		descArr->width = 1;
-		descArr->height = 1;
-		descArr->depth = 1;
-		descArr->shape = (char *) malloc(1);
-		descArr->shape[0] = 1;
-		*descendents = descArr;
-		return 1;
-	}
-	//if there is a source list, we take each member and try to find all possible shapes that can be created by adding one cube
-	int bwidth, bheight, bdepth, bsize, blx, bly, blz;
-	int buf;
+	int bwidth, bheight, bdepth, bsize, blx, bly, blz, maxSize;
+	int midptW, midptH, midptD, adjW, adjH, adjD, modW, modH, modD, valH, valD, valT, val;
 	int dictLen;
 	int zMove, dblLine;
-	int pos, posC, posS, posF, posL;
+	int pos, posC, posS, posF, posL, scPos;
 	int frameStart, frameEnd, lineStart, lineEnd;
-	int sourceConnectValue, connectValue;
+	int connectCount;
+	int dimChanged;
 	int posCon[6];
 	int cubeCount;
 	int dimMov[3];
 	int i, j, k, l, m, n;
 	char *box;
-	int shapeCount = 0;
+	int shapeCount;
 	CubeShape bufShape;
 	void **shapeDict;
+	CubeShape *shape;
+	//first check that there is a source list, and return the cube shape for one cube if there isn't
+	if (!source || !sourceCount){
+		shape = (CubeShape *) malloc(sizeof(CubeShape));
+		shape->value = shape->edgeValue = 21;
+		shape->connections = 0;
+		shape->width = 1;
+		shape->height = 1;
+		shape->depth = 1;
+		shape->box = (char *) malloc(1);
+		shape->box[0] = 1;
+		*descendents = shape;
+		return 1;
+	}
+	//if there is a source list, we take each member and try to find all possible shapes that can be created by adding one cube
+	shapeCount = 0;
 	//the new cube count is the source + 1
 	cubeCount = GetCubeCount(source) + 1;
 	//create the shape dictionary and set all entries to 0
@@ -57,8 +59,13 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 	for (i = 0; i < dictLen; i++){
 		shapeDict[i] = 0;
 	}
+	//get the maximum possible size of the array representing a new shape, and assign an array of that size as the creation box and buffer shape box
+	val = (cubeCount > 2)? (cubeCount / 3) + 3 : 64;
+	maxSize = val * val * val;
+	box = (char *) malloc(maxSize);
+	bufShape.box = (char *) malloc(maxSize);
 	//go through every source shape and get all their unique descendents
-	for (int scPos = 0; scPos < sourceCount; scPos++){
+	for (scPos = 0; scPos < sourceCount; scPos++){
 		//first we need to define the creation box depending on the dimensions of the source shape
 		bwidth = source[scPos].width + 2;
 		bheight = source[scPos].height + 2;
@@ -69,32 +76,45 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 		blz = bdepth - 1;
 		dblLine = bwidth * 2;
 		zMove = bwidth * bheight;
-		//build the creation box for the current shape and copy the shape into it
-		box = (char *) malloc(bsize);
-		for (i = 0; i < bsize; i++){
-			box[i] = 0;	//null all cubes in the creation box
-		}
-		pos = zMove + bwidth + 1; //the starting position for the copy is one frame, one line and one cube from the beginning
+		//copy the source shape into the creation box, while zeroing all spaces on the edge
+		pos = 0;
 		posC = 0;
+		//null all spaces in the first frame, first line of the second frame, and first space of the second line
+		val = zMove + bwidth + 1;
+		for (i = 0; i < val; i++){
+			box[pos++] = 0;
+		}
+		//start copying the source shape
 		for (i = 0; i < source[scPos].depth; i++){
 			for (j = 0; j < source[scPos].height; j++){
 				for (k = 0; k < source[scPos].width; k++){
-					box[pos++] = source[scPos].shape[posC++];
+					box[pos++] = source[scPos].box[posC++];
 				}
-				//on line change, increment the box position by 2 (to skip the last cube of the current line and the first one of the next)
-				pos += 2;
+				//on line change, null the last space of the current line and the first space of the next one
+				for (k = 0; k < 2; k++){
+					box[pos++] = 0;
+				}
 			}
-			//on frame change, increment the box position by 2 lines (to skip the last line of the current frame and the first one of the next)
-			pos += dblLine;
+			//on frame change, null all spaces in the last line of the current frame and the first line of the next one
+			for (j = 0; j < dblLine; j++){
+				box[pos++] = 0;
+			}
 		}
-		//calculate the source connection value
-		bufShape.width = bwidth;
-		bufShape.height = bheight;
-		bufShape.depth = bdepth;
-		bufShape.shape = box;
-		sourceConnectValue = GetShapeConnectionValue(&bufShape);
-		//build the shape array for the potential shape
-		bufShape.shape = (char *) malloc(bsize);
+		//null the remaining spaces
+		val = zMove - bwidth - 1;
+		for (i = 0; i < val; i++){
+			box[pos++] = 0;
+		}
+		//calculate the midpoint and distance adjusters for the width, height and depth
+		midptW = (bwidth / 2) + (bwidth % 2);
+		midptH = (bheight / 2) + (bheight % 2);
+		midptD = (bdepth / 2) + (bdepth % 2);
+		adjW = source[scPos].width + 6;
+		adjH = source[scPos].height + 6;
+		adjD = source[scPos].depth + 6;
+		modW = bwidth - 1;
+		modH = bheight - 1;
+		modD = bdepth - 1;
 		//now we go through each cube of the creation box and try to find if one of its neighbour is not empty, at which point we create a new shape by adding a cube at the current position
 		posS = -1;
 		frameStart = 0;
@@ -102,76 +122,95 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 		for (i = 0; i < bdepth; i++){
 			lineStart = frameStart;
 			lineEnd = lineStart + bwidth;
+			//calculate the depth edge value (adjusted distance to the closest edge in the z axis) for cubes on this frame
+			valD = ((i < midptD)? i : (modD - i)) * adjD;
 			for (j = 0; j < bheight; j++){
+				//calculate the height edge value (adjusted distance to the closest edge in the y axis) for cubes on this line
+				valH = ((j < midptH)? j : (modH - j)) * adjH;
 				for (k = 0; k < bwidth; k++){
 					posS++;
 					//if there is already a cube at the current position, move on to the next
 					if (box[posS]) continue;
 					//if there is no cube at the current position check if there is a cube in any of the six neighbouring positions, and record how many connections the new cube would have
-					connectValue = ((((posCon[0] = posS - 1) >= lineStart) && (box[posCon[0]])) + (((posCon[1] = posS + 1) < lineEnd) && (box[posCon[1]])) + (((posCon[2] = posS - bwidth) >= frameStart) && (box[posCon[2]])) + (((posCon[3] = posS + bwidth) < frameEnd) && (box[posCon[3]])) + (((posCon[4] = posS - zMove) >= 0) && (box[posCon[4]])) + (((posCon[5] = posS  + zMove) < bsize) && (box[posCon[5]])));
+					connectCount = ((((posCon[0] = posS - 1) >= lineStart) && (box[posCon[0]])) + (((posCon[1] = posS + 1) < lineEnd) && (box[posCon[1]])) + (((posCon[2] = posS - bwidth) >= frameStart) && (box[posCon[2]])) + (((posCon[3] = posS + bwidth) < frameEnd) && (box[posCon[3]])) + (((posCon[4] = posS - zMove) >= 0) && (box[posCon[4]])) + (((posCon[5] = posS  + zMove) < bsize) && (box[posCon[5]])));
 					//if there is at least one connection  (a neighbouring cube) create a new shape
-					if (connectValue){
+					if (connectCount){
 						//if there is, create a new shape
 						//*******************
 						//shape creation
 						//*******************
+						//set the connection score for the new shape
+						bufShape.connections = source[scPos].connections + connectCount;
 						//get the new shape dimensions
 						bufShape.width = source[scPos].width + ((k == 0) || (k == blx));
 						bufShape.height = source[scPos].height + ((j == 0) || (j == bly));
 						bufShape.depth = source[scPos].depth + ((i == 0) || (i == blz));
+						//check that any dimension has changed
+						dimChanged = ((bufShape.width != source[scPos].width) || (bufShape.height != source[scPos].height) || (bufShape.depth != source[scPos].depth));
 						//get the position of the starting frame for copying, depending on the position of the new cube
-						if (k == 0){ //the new cube is in the first column
-							posF = zMove + bwidth;
-						}
-						else if (j == 0){ //the new cube is in the first line
-							posF = zMove + 1;
-						}
-						else if (i == 0){ //the new cube is in the first frame
-							posF = bwidth + 1;
-						}
-						else { //the new cube is inside the source shape box, or "after" it
-							posF = zMove + bwidth + 1;
-						}
-						//reorganise the shape so that the longest dimension becomes the width, the second longest becomes the height, and the shortest becomes depth, and define the dimension moves accordingly
-						if (bufShape.height > bufShape.width){
-							dimMov[0] = bwidth;
-							dimMov[1] = -1;
-							dimMov[2] = zMove;
-							posF += (bufShape.width - 1);
-							buf = bufShape.width;
-							bufShape.width = bufShape.height;
-							bufShape.height = buf;
-						}
-						else if (bufShape.depth > bufShape.width){
-							dimMov[0] = zMove;
-							dimMov[1] = 1;
-							dimMov[2] = bwidth;
-							buf = bufShape.width;
-							bufShape.width = bufShape.depth;
-							bufShape.depth = buf;
-						}
-						else if (bufShape.depth > bufShape.height){
-							dimMov[0] = -1;
-							dimMov[1] = zMove;
-							dimMov[2] = bwidth;
-							posF += (bufShape.width - 1);
-							buf = bufShape.height;
-							bufShape.height = bufShape.depth;
-							bufShape.depth = buf;
+						if (dimChanged){
+							//if any dimension changed, the starting point might have changed
+							if (k == 0){ //the new cube is in the first column
+								posF = zMove + bwidth;
+							}
+							else if (j == 0){ //the new cube is in the first line
+								posF = zMove + 1;
+							}
+							else if (i == 0){ //the new cube is in the first frame
+								posF = bwidth + 1;
+							}
+							else { //the new cube is inside the source shape box, or "after" it
+								posF = zMove + bwidth + 1;
+							}
+							//organise the shape so that the longest dimension is the width, the second longest is the height, and the shortest is depth, and define the dimension moves accordingly
+							if (bufShape.height > bufShape.width){
+								dimMov[0] = bwidth;
+								dimMov[1] = -1;
+								dimMov[2] = zMove;
+								posF += (bufShape.width - 1);
+								val = bufShape.width;
+								bufShape.width = bufShape.height;
+								bufShape.height = val;
+							}
+							else if (bufShape.depth > bufShape.width){
+								dimMov[0] = zMove;
+								dimMov[1] = 1;
+								dimMov[2] = bwidth;
+								val = bufShape.width;
+								bufShape.width = bufShape.depth;
+								bufShape.depth = val;
+							}
+							else if (bufShape.depth > bufShape.height){
+								dimMov[0] = -1;
+								dimMov[1] = zMove;
+								dimMov[2] = bwidth;
+								posF += (bufShape.width - 1);
+								val = bufShape.height;
+								bufShape.height = bufShape.depth;
+								bufShape.depth = val;
+							}
+							else {
+								dimMov[0] = 1;
+								dimMov[1] = bwidth;
+								dimMov[2] = zMove;
+							}
 						}
 						else {
+							//if no dimension has changed, the starting point is always one space, one line and one frame from teh start of the creation box
+							posF = zMove + bwidth + 1;
+							//and the dimension moves are the same as the source
 							dimMov[0] = 1;
 							dimMov[1] = bwidth;
 							dimMov[2] = zMove;
 						}
-						//now copy the shape from the creation box into the shape object shape array, while rotating it so that the width is the longest dimension, heights second longest and depth shortest
+						//now copy the shape from the creation box into the shape object box array, while rotating it so that the width is the longest dimension, heights second longest and depth shortest
 						posC = posL = posF;
 						pos = 0;
 						box[posS] = 1; //add the new cube to the creation box for the copy
 						for (l = 0; l < bufShape.depth; l++){
 							for (m = 0; m < bufShape.height; m++){
 								for (n = 0; n < bufShape.width; n++){
-									bufShape.shape[pos++] = box[posC];
+									bufShape.box[pos++] = box[posC];
 									posC += dimMov[0];
 								}
 								//get the new "line" position in the creation box
@@ -187,7 +226,19 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 						//*******************
 						//shape value calculation
 						//*******************
-						SetShapeValue(&bufShape, cubeCount, sourceConnectValue + connectValue);
+						if (dimChanged){
+							//if a dimension changed, we must recalculate all cube edge values, meaning the source shape value is useless
+							SetShapeValue(&bufShape);
+						}
+						else {
+							//if no dimension has changed, we only need to calculate the edge value for the new cube and add it to the source edge value to get the new one
+							//calculate the width edge value (adjusted distance to the closest edge in the x axis) for this cube and the total edge value by adding up all edges values
+							valT = valD + valH + (((k < midptW)? k : (modW - k)) * adjW);
+							//the new shape edge value is the same as the source plus the edge value of the new cube
+							bufShape.edgeValue = source[scPos].edgeValue + valT;
+							//the new shape value is the same as the source plus the edge value and connection count of the new cube
+							bufShape.value = source[scPos].value + connectCount + valT;
+						}
 						//now that we have the shape value, check if it is unique
 						//*******************
 						//shape uniqueness check
@@ -204,10 +255,10 @@ int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount){
 			frameStart += zMove;
 			frameEnd += zMove;
 		}
-		//clean up the creation box and potential shape array
-		free(box);
-		free(bufShape.shape);
 	}
+	//clean up the creation box and buffer shape array
+	free(box);
+	free(bufShape.box);
 	//return the final shape array and shape count
 	*descendents = ShapeDictionaryToArray(shapeDict, dictLen, shapeCount);
 	return shapeCount;
@@ -220,24 +271,27 @@ int GetCubeCount(CubeShape *source){
 	boxSize = source->width * source->height * source->depth;
 	//go through the entire shape box and count the number of cubes
 	for (i = 0; i < boxSize; i++){
-		cubeCount += source->shape[i];
+		cubeCount += source->box[i];
 	}
 	return cubeCount;
 }
 
 int GetShapeDictionarySize(int cubeCount){
 	//this function returns the size of the dictionary required to store shapes made with the specified cube count
-	int shellWeight, count, dictLen;
-	shellWeight = cubeCount + 7; //the maximum possible shell weight is 7 (the base shell weight) + the number of cubes in the new shape
+	int maxEdgeValue, count, dictLen;
+	//get the maximum possible edge value for a cube
+	maxEdgeValue = (cubeCount + 6) * cubeCount; //this is above any possible edge value
+	//get the size of the biggest box possible with this cube count
 	count = ((cubeCount / 3) + 1); //get the side length of the shape with the biggest possible box, which is three lines perpendicular to each other in each dimension. we add 1 to make sure to be larger
 	count = (count > 1)? count * count * count : 8; //cube it (as there are three dimensions) to get the maximum box size (minimum 8)
-	dictLen = ((shellWeight + 6) * count * 3) + ((cubeCount - 1) * 150); //the length of the dictionary is determined by the largest possible shape value
+	//the length of the dictionary is determined by the largest possible shape value, function of the maximum edge value, maximum connections and maximum dimension difference
+	dictLen = ((maxEdgeValue + 6) * count * 3) + (cubeCount * 1600);
 	dictLen = (dictLen > MAXDICTLEN)? MAXDICTLEN : dictLen; //limit the size of the dictionary to the predefined maximum
 	return dictLen;
 }
 
-int GetShapeConnectionValue(CubeShape *shape){
-	//this function returns the connection value for the given shape
+void SetShapeConnections(CubeShape *shape){
+	//this function sets the connections value for the given shape
 	int posCon[6];
 	int connectValue, size, zMove, pos;
 	int frameStart, frameEnd, lineStart, lineEnd;
@@ -254,9 +308,9 @@ int GetShapeConnectionValue(CubeShape *shape){
 		for (j = 0; j < shape->height; j++){
 			for (k = 0; k < shape->width; k++){
 				//for each space in the shape box, check if there is a cube present
-				if (shape->shape[pos]){
+				if (shape->box[pos]){
 					//if there is , add the sum of connections to all surrounding cubes to the connection value
-					connectValue += ((((posCon[0] = pos - 1) >= lineStart) && (shape->shape[posCon[0]])) + (((posCon[1] = pos + 1) < lineEnd) && (shape->shape[posCon[1]])) + (((posCon[2] = pos - shape->width) >= frameStart) && (shape->shape[posCon[2]])) + (((posCon[3] = pos + shape->width) < frameEnd) && (shape->shape[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (shape->shape[posCon[4]])) + (((posCon[5] = pos  + zMove) < size) && (shape->shape[posCon[5]])));
+					connectValue += ((((posCon[0] = pos - 1) >= lineStart) && (shape->box[posCon[0]])) + (((posCon[1] = pos + 1) < lineEnd) && (shape->box[posCon[1]])) + (((posCon[2] = pos - shape->width) >= frameStart) && (shape->box[posCon[2]])) + (((posCon[3] = pos + shape->width) < frameEnd) && (shape->box[posCon[3]])) + (((posCon[4] = pos - zMove) >= 0) && (shape->box[posCon[4]])) + (((posCon[5] = pos  + zMove) < size) && (shape->box[posCon[5]])));
 				}
 				pos++;
 			}
@@ -268,73 +322,44 @@ int GetShapeConnectionValue(CubeShape *shape){
 		frameStart += zMove;
 		frameEnd += zMove;
 	}
-	connectValue = connectValue / 2; // as a connection always involve two cubes, divide by two to get the number of unique connections
-	return connectValue;
+	shape->connections = connectValue / 2; // as a connection always involve two cubes, divide by two to get the number of unique connections
 }
 
-void SetShapeValue(CubeShape *shape, int cubeCount, int connectionValue){
+void SetShapeValue(CubeShape *shape){
 	//this function calculates ans sets the shape value for the supplied shape
-	int dimMov[3], dimLen[3];
-	int dimLenC;
-	int posC, posL;
-	int startPos[2];
-	int shellWeight, shellCount, shellCountAll;
-	int i, j, k, l;
-	//get the dimensions and moves of the new shape
-	dimLen[0] = shape->width;
-	dimLen[1] = shape->height;
-	dimLen[2] = shape->depth;
-	dimMov[0] = 1; //width move
-	dimMov[1] = shape->width; //height move
-	dimMov[2] = shape->width * shape->height; //depth move
-	//if the cube count is 0, calculate it
-	if (!cubeCount)
-		cubeCount = GetCubeCount(shape);
-	//if the connection value is 0, calculate it
-	if (!connectionValue)
-		connectionValue = GetShapeConnectionValue(shape);
-	//the shape value is a combination of its connection value, the weighted difference between its dimensions and the cube shell sum
-	shape->value = connectionValue + (shape->width - shape->height) * 100 + (shape->width - shape->depth) * 50;
-	//the cube shell sum is the sum by dimension of all cubes in successive shells multiplied by the corresponding shell weight
-	for (i = 0; i < 3; i++){
-		//store the dimension we need to keep track of
-		dimLenC = dimLen[i];
-		//build successive shells within the box, and check how many cubes are in each shell
-		shellCountAll = 0;
-		shellWeight = 7;
-		startPos[0] = 0; //this is the starting position of the "left" shell
-		startPos[1] = dimMov[i] * (dimLenC - 1); //this is the starting position of the "right" shell
-		while (1){
-			//if the current dimension length is less than 2, we cannot create a new shell and exit
-			if (dimLenC <= 2) break;
-			//go through both current shells and count all the cubes
-			shellCount = 0;
-			for (j = 0; j < 2; j++){
-				posC = posL = startPos[j];
-				for (k = 0; k < dimLen[dimOrderVal[i][0]]; k++){
-					for (l = 0; l < dimLen[dimOrderVal[i][1]]; l++){
-						shellCount += shape->shape[posC];
-						posC += dimMov[dimOrderVal[i][1]];
-					}
-					posL += dimMov[dimOrderVal[i][0]];
-					posC = posL;
+	int midptW, midptH, midptD, adjW, adjH, adjD, valH, valD;
+	int pos;
+	int i, j, k;
+	//calculate the midpoint and distance adjusters for the width, height and depth
+	midptW = (shape->width / 2) + (shape->width % 2);
+	midptH = (shape->height / 2) + (shape->height % 2);
+	midptD = (shape->depth / 2) + (shape->depth % 2);
+	adjW = shape->width + 6;
+	adjH = shape->height + 6;
+	adjD = shape->depth + 6;
+	//if the shape connections is 0, calculate them
+	if (!shape->connections)
+		SetShapeConnections(shape);
+	//the cube edge values are calculated by taking the adjusted distance to the closest edge and squaring it. we do this for all three dimensions
+	pos = 0;
+	shape->edgeValue = 0;
+	for (i = 0; i < shape->depth; i++){
+		//calculate the depth edge value (adjusted distance to the closest edge in the z axis) for cubes on this frame
+		valD = ((i < midptD)? (i + 1) : (shape->depth - i)) * adjD;
+		for (j = 0; j < shape->height; j++){
+			//calculate the height edge value (adjusted distance to the closest edge in the y axis) for cubes on this line
+			valH = ((j < midptH)? (j + 1) : (shape->height - j)) * adjH;
+			for (k = 0; k < shape->width; k++){
+				//check that there is a cube present
+				if (shape->box[pos++]){
+					//if there is, calculate the width edge value (adjusted distance to the closest edge in the x axis) and add it and the other edge values top the shape edge value total
+					shape->edgeValue += ((((k < midptW)? (k + 1) : (shape->width - k)) * adjW) + valH + valD);
 				}
 			}
-			//add the shell count for this shell to the total shell cube count
-			shellCountAll += shellCount;
-			//add the shell count multiplied by the shell weight to the shape value
-			shape->value += (shellCount * shellWeight);
-			//subtract two to the dimension length
-			dimLenC -= 2;
-			//adjust the starting positions
-			startPos[0] += dimMov[i];
-			startPos[1] -= dimMov[i];
-			//increase the shell weight
-			shellWeight += 2;
 		}
-		//add the shell value of the last shell to the shape value
-		shape->value += ((cubeCount - shellCountAll) * shellWeight);
 	}
+	//the shape value is a combination of its connection value, the weighted difference between its dimensions and the cube edge value total
+	shape->value = shape->connections + shape->edgeValue + (shape->width - shape->height) * 1000 + (shape->width - shape->depth) * 600;
 }
 
 int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
@@ -403,13 +428,15 @@ int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
 			//create a new copy of the shape object
 			shape = (CubeShape *) malloc(sizeof(CubeShape));
 			shape->value = newShape->value;
+			shape->edgeValue = newShape->edgeValue;
+			shape->connections = newShape->connections;
 			shape->width = newShape->width;
 			shape->height = newShape->height;
 			shape->depth = newShape->depth;
 			count = newShape->width * newShape->height * newShape->depth;
-			shape->shape = (char *) malloc(count);
+			shape->box = (char *) malloc(count);
 			for (i = 0; i < count; i++){
-				shape->shape[i] = newShape->shape[i];
+				shape->box[i] = newShape->box[i];
 			}
 			//create the linked list that will contain the shape pointer
 			link = (void **) malloc(sizeof(void *) * 2);
@@ -424,13 +451,15 @@ int AddUniqueShape(void **shapeDictionary, CubeShape *newShape){
 		//create a new copy of the shape object
 		shape = (CubeShape *) malloc(sizeof(CubeShape));
 		shape->value = newShape->value;
+		shape->edgeValue = newShape->edgeValue;
+		shape->connections = newShape->connections;
 		shape->width = newShape->width;
 		shape->height = newShape->height;
 		shape->depth = newShape->depth;
 		count = newShape->width * newShape->height * newShape->depth;
-		shape->shape = (char *) malloc(count);
+		shape->box = (char *) malloc(count);
 		for (i = 0; i < count; i++){
-			shape->shape[i] = newShape->shape[i];
+			shape->box[i] = newShape->box[i];
 		}
 		//create the linked list that will contain the shape pointer
 		link = (void **) malloc(sizeof(void *) * 2);
@@ -448,8 +477,8 @@ int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *
 	int dimLen[3], dimMov[3], dimLenC[3], dimMovC[3];
 	int pos, posC, posF, posL;
 	int match;
-	//check that the first an second shape have the same value and dimensions
-	if ((firstShape->value == secondShape->value) && (firstShape->width == secondShape->width) && (firstShape->height == secondShape->height) && (firstShape->depth == secondShape->depth)){
+	//check that the first an second shape have the same characteristics
+	if ((firstShape->value == secondShape->value) && (firstShape->edgeValue == secondShape->edgeValue) && (firstShape->connections == secondShape->connections) && (firstShape->width == secondShape->width) && (firstShape->height == secondShape->height) && (firstShape->depth == secondShape->depth)){
 		//if the dimensions and value are the same, we must check whether the cube positions match exactly
 		//get the dimensions and moves of the both shapes (since we know they have the same dimensions)
 		dimLen[0] = firstShape->width;
@@ -477,7 +506,7 @@ int ShapeMatch(CubeShape *firstShape, CubeShape *secondShape, int *corner, int *
 					for (l = 0; l < dimLenC[1]; l++){
 						for (m = 0; m < dimLenC[0]; m++){
 							//we compare the two positions with an exclusive or. they differ if the result is 1
-							if (firstShape->shape[posC] ^ secondShape->shape[pos++]){
+							if (firstShape->box[posC] ^ secondShape->box[pos++]){
 								//if the positions don't match, we, know the shapes are not the same and can stop the comparison in this orientation
 								match = 0;
 								goto checkMatch;
@@ -517,10 +546,12 @@ CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, in
 			while (link){
 				shapeC = (CubeShape *) link[0];
 				shapeArr[pos].value = shapeC->value;
+				shapeArr[pos].edgeValue = shapeC->edgeValue;
+				shapeArr[pos].connections = shapeC->connections;
 				shapeArr[pos].width = shapeC->width;
 				shapeArr[pos].height = shapeC->height;
 				shapeArr[pos].depth = shapeC->depth;
-				shapeArr[pos].shape = shapeC->shape;
+				shapeArr[pos].box = shapeC->box;
 				pos++;
 				free((void *) shapeC);
 				linkP = link;
@@ -536,7 +567,7 @@ CubeShape *ShapeDictionaryToArray(void **shapeDictionary, int dictionarySize, in
 void CleanShapeList(CubeShape *shapeList, int shapeCount){
 	//this function is used to clean up the shape arrays in the provided cube shape list, and then to clean it
 	for (int i = 0; i < shapeCount; i++){
-		free((void *) shapeList[i].shape);
+		free((void *) shapeList[i].box);
 	}
 	//clean the shape list
 	free((void *) shapeList);
@@ -561,34 +592,35 @@ void CleanShapeDictionary(void **shapeDictionary, int dictionarySize){
 
 int CompareShapeLists(CubeShape *sourceList, int sourceLength, CubeShape *targetList, int targetLength, CubeShape *missingList){
 	//this function finds all the shapes from the target list that are missing in the source list
-	int dictLen, missingCount, cubeCount, count;
+	int dictLen, missingCount, count;
 	void **shapeDict;
 	int i, j;
 	//create the shape dictionary and set all entries to 0
-	cubeCount = GetCubeCount(sourceList);
-	dictLen = GetShapeDictionarySize(cubeCount);
+	dictLen = GetShapeDictionarySize(GetCubeCount(sourceList));
 	shapeDict = (void **) malloc(sizeof(void *) * dictLen);
 	for (i = 0; i < dictLen; i++){
 		shapeDict[i] = 0;
 	}
 	//add all source list entries
 	for (i = 0; i < sourceLength; i++){
-		if (!sourceList[i].value) SetShapeValue(&sourceList[i], cubeCount, 0); //calculate the shape value if it hasn't one
+		if (!sourceList[i].value) SetShapeValue(&sourceList[i]); //calculate the shape value if it hasn't one
 		AddUniqueShape(shapeDict, &sourceList[i]);
 	}
 	//go through the target list and try to add each shape to the dictionary
 	missingCount = 0;
 	for (i = 0; i < targetLength; i++){
-		if (!targetList[i].value) SetShapeValue(&targetList[i], cubeCount, 0); //calculate the shape value if it hasn't one
+		if (!targetList[i].value) SetShapeValue(&targetList[i]); //calculate the shape value if it hasn't one
 		if (AddUniqueShape(shapeDict, &targetList[i])){
 			//if the shape was successfully added to the dictionary, it wasn't present in the source list, copy it to the missing list
 			missingList[missingCount].value = targetList[i].value;
+			missingList[missingCount].edgeValue = targetList[i].edgeValue;
+			missingList[missingCount].connections = targetList[i].connections;
 			missingList[missingCount].width = targetList[i].width;
 			missingList[missingCount].height = targetList[i].height;
 			missingList[missingCount].depth = targetList[i].depth;
 			count = missingList[missingCount].width * missingList[missingCount].height * missingList[missingCount].depth;
 			for (j = 0; j < count; j++){
-				missingList[missingCount].shape[j] = targetList[i].shape[j];
+				missingList[missingCount].box[j] = targetList[i].box[j];
 			}
 			missingCount++;
 		}
@@ -601,12 +633,9 @@ int CompareShapeLists(CubeShape *sourceList, int sourceLength, CubeShape *target
 
 void SetShapeListValues(CubeShape *shapeList, int listLength){
 	//this function calculates and sets the shape value for each shape in the shape list
-	int cubeCount;
-	//get the cube count for the shapes
-	cubeCount = GetCubeCount(shapeList);
 	//set the shape value for each shape
 	for (int i = 0; i < listLength; i++){
-		SetShapeValue(&shapeList[i], cubeCount, 0);
+		SetShapeValue(&shapeList[i]);
 	}
 }
 
@@ -762,7 +791,7 @@ int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCo
 			//try to add the shape to the dictionary
 			shapeCount += AddUniqueShape(shapeDict, &shapeArr[j]);
 			//clean up the shape
-			free((void *) shapeArr[j].shape);
+			free((void *) shapeArr[j].box);
 		}
 		//clean up the shape array
 		free((void *) shapeArr);
