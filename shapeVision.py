@@ -64,12 +64,12 @@ class ShapeVision:
 			shapeArr[i].height = len(npShapeData[i][0])
 			shapeArr[i].width = len(npShapeData[i][0][0])
 			size = shapeArr[i].width * shapeArr[i].height * shapeArr[i].depth
-			shapeArr[i].shape = (c_char * size)()
+			shapeArr[i].box = (c_char * size)()
 			pos = 0
 			for j in range(shapeArr[i].depth):
 				for k in range(shapeArr[i].height):
 					for l in range(shapeArr[i].width):
-						shapeArr[i].shape[pos] = int(npShapeData[i][j][k][l])
+						shapeArr[i].box[pos] = int(npShapeData[i][j][k][l])
 						pos += 1
 		#set the shape values
 		self.CSSL.setShapeListValues(shapeArr, shapeCount)
@@ -176,13 +176,13 @@ class ShapeVision:
 			figList = []
 			for index in indexList:
 				#create the data and populate it with the specified shape
-				axes = [shapeList[index][3], shapeList[index][2], shapeList[index][1]]
+				axes = [shapeList[index][5], shapeList[index][4], shapeList[index][3]]
 				data = numpy.empty(axes, dtype = bool)
 				pos = 0
-				for j in range(shapeList[index][3]):
-					for k in range(shapeList[index][2]):
-						for l in range(shapeList[index][1]):
-							data[j][k][l] = (shapeList[index][4][pos] == 1)
+				for j in range(shapeList[index][5]):
+					for k in range(shapeList[index][4]):
+						for l in range(shapeList[index][3]):
+							data[j][k][l] = (shapeList[index][6][pos] == 1)
 							pos += 1
 				data = data.transpose()
 				#build and show the plot

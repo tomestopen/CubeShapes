@@ -95,7 +95,7 @@ class ShapeFinder:
 		missingShapeArr = (CubeShape * secondLen)() #the maximum number of missing shapes is the number of shapes in the second array
 		maxBoxSize = (firstShapeArr[0].width + firstShapeArr[0].height + firstShapeArr[0].depth - 2) ** 3
 		for i in range(secondLen):
-			missingShapeArr[i].shape = (c_char * maxBoxSize)()
+			missingShapeArr[i].box = (c_char * maxBoxSize)()
 		missingLen = self.CSSL.compareShapeLists(firstShapeArr, firstLen, secondShapeArr, secondLen, missingShapeArr)
 		#check whether any shapes were missing
 		if missingLen == 0:
@@ -105,13 +105,15 @@ class ShapeFinder:
 		missingShapeArrFinal = (CubeShape * missingLen)()
 		for i in range(missingLen):
 			missingShapeArrFinal[i].value = missingShapeArr[i].value
+			missingShapeArrFinal[i].edgeValue = missingShapeArr[i].edgeValue
+			missingShapeArrFinal[i].connections = missingShapeArr[i].connections
 			missingShapeArrFinal[i].width = missingShapeArr[i].width
 			missingShapeArrFinal[i].height = missingShapeArr[i].height
 			missingShapeArrFinal[i].depth = missingShapeArr[i].depth
 			length = missingShapeArrFinal[i].width * missingShapeArrFinal[i].height * missingShapeArrFinal[i].depth
-			missingShapeArrFinal[i].shape = (c_char * length)()
+			missingShapeArrFinal[i].box = (c_char * length)()
 			for j in range(length):
-				missingShapeArrFinal[i].shape[j] = missingShapeArr[i].shape[j]
+				missingShapeArrFinal[i].box[j] = missingShapeArr[i].box[j]
 		return missingShapeArrFinal
 
 	def getShapeDescendents(self, shape):
@@ -125,13 +127,15 @@ class ShapeFinder:
 		descArrFinal = (CubeShape * descCount)()
 		for i in range(descCount):
 			descArrFinal[i].value = descArr[i].value
+			descArrFinal[i].edgeValue = descArr[i].edgeValue
+			descArrFinal[i].connections = descArr[i].connections
 			descArrFinal[i].width = descArr[i].width
 			descArrFinal[i].height = descArr[i].height
 			descArrFinal[i].depth = descArr[i].depth
 			length = descArrFinal[i].width * descArrFinal[i].height * descArrFinal[i].depth
-			descArrFinal[i].shape = (c_char * length)()
+			descArrFinal[i].box = (c_char * length)()
 			for j in range(length):
-				descArrFinal[i].shape[j] = descArr[i].shape[j]
+				descArrFinal[i].box[j] = descArr[i].box[j]
 		#clean up the descendent array
 		self.CSSL.cleanShapeList(descArr, descCount)
 		return descArrFinal
@@ -171,14 +175,16 @@ class ShapeFinder:
 		#this function converts the provided shape array into a list
 		shapeList = []
 		for i in range(len(shapeArray)):
-			shape = [0, 0, 0, 0, []]
+			shape = [0, 0, 0, 0, 0, 0, []]
 			shape[0] = shapeArray[i].value
-			shape[1] = shapeArray[i].width
-			shape[2] = shapeArray[i].height
-			shape[3] = shapeArray[i].depth
+			shape[1] = shapeArray[i].edgeValue
+			shape[2] = shapeArray[i].connections
+			shape[3] = shapeArray[i].width
+			shape[4] = shapeArray[i].height
+			shape[5] = shapeArray[i].depth
 			size = shapeArray[i].width * shapeArray[i].height * shapeArray[i].depth
 			for j in range(size):
-				shape[4].append(int.from_bytes(shapeArray[i].shape[j], "little"))
+				shape[6].append(int.from_bytes(shapeArray[i].box[j], "little"))
 			shapeList.append(shape)
 		return shapeList
 
@@ -194,17 +200,19 @@ class ShapeFinder:
 				for line in lines:
 					#each line of the shape file represents a shape object
 					text = line.strip().split(";") #split the line by semicolon
-					if len(text) != 5:
-						#if the line is not split  in five, this is an invalid file, exit
+					if len(text) != 7:
+						#if the line is not split in seven, this is an invalid file, exit
 						return None
-					shape = [0, 0, 0, 0, []]
+					shape = [0, 0, 0, 0, 0, 0, []]
 					shape[0] = int(text[0]) #the first element of the line is the shape value
-					shape[1] = int(text[1]) #the second element is the width
-					shape[2] = int(text[2]) #the third element is the height
-					shape[3] = int(text[3]) #the fourth element is the depth
+					shape[1] = int(text[1]) #the second element of the line is the shape edge value
+					shape[2] = int(text[2]) #the third element of the line is the shape connections
+					shape[3] = int(text[3]) #the fourth element is the width
+					shape[4] = int(text[4]) #the fifth element is the height
+					shape[5] = int(text[5]) #the sixth element is the depth
 					#the fifth element is the actual representation of the shape, as a string of ones and zeros
-					for c in text[4]:
-						shape[4].append(int(c))
+					for c in text[6]:
+						shape[6].append(int(c))
 					shapeList.append(shape)
 		#once we have loaded all the source shapes, either create an array of cube shapes structures and load them with the data or return the list
 		if asCArray:
@@ -212,14 +220,16 @@ class ShapeFinder:
 			sourceShapeArr = (CubeShape * sourceShapeCount)()
 			for i in range(sourceShapeCount):
 				sourceShapeArr[i].value = shapeList[i][0]
-				sourceShapeArr[i].width = shapeList[i][1]
-				sourceShapeArr[i].height = shapeList[i][2]
-				sourceShapeArr[i].depth = shapeList[i][3]
-				length = len(shapeList[i][4])
-				sourceShapeArr[i].shape = (c_char * length)()
-				shapeByte = bytes(shapeList[i][4])
+				sourceShapeArr[i].edgeValue = shapeList[i][1]
+				sourceShapeArr[i].connections = shapeList[i][2]
+				sourceShapeArr[i].width = shapeList[i][3]
+				sourceShapeArr[i].height = shapeList[i][4]
+				sourceShapeArr[i].depth = shapeList[i][5]
+				length = len(shapeList[i][6])
+				sourceShapeArr[i].box = (c_char * length)()
+				shapeByte = bytes(shapeList[i][6])
 				for j in range(length):
-					sourceShapeArr[i].shape[j] = shapeByte[j]
+					sourceShapeArr[i].box[j] = shapeByte[j]
 			return sourceShapeArr
 		else:
 			return shapeList
@@ -232,8 +242,8 @@ class ShapeFinder:
 				count = shapeList[i].width * shapeList[i].height * shapeList[i].depth
 				shapeStr = ""
 				for j in range(count):
-					shapeStr += str(int.from_bytes(shapeList[i].shape[j], "little"))
-				file.write(str(shapeList[i].value) + ";" + str(shapeList[i].width) + ";" + str(shapeList[i].height) + ";" + str(shapeList[i].depth) + ";" + shapeStr + "\n")
+					shapeStr += str(int.from_bytes(shapeList[i].box[j], "little"))
+				file.write(str(shapeList[i].value) + ";" + str(shapeList[i].edgeValue) + ";" + str(shapeList[i].connections) + ";" + str(shapeList[i].width) + ";" + str(shapeList[i].height) + ";" + str(shapeList[i].depth) + ";" + shapeStr + "\n")
 
 	def extract(shapeList, value = 0, width = 0, height = 0, depth = 0):
 		#this function attempts to crate a list of shapes in the supplied shape list that match the specified characteristics
@@ -261,13 +271,15 @@ class ShapeFinder:
 		extractArr = (CubeShape * matchCount)()
 		for i in range(matchCount):
 			extractArr[i].value = matchList[i].value
+			extractArr[i].edgeValue = matchList[i].edgeValue
+			extractArr[i].connections = matchList[i].connections
 			extractArr[i].width = matchList[i].width
 			extractArr[i].height = matchList[i].height
 			extractArr[i].depth = matchList[i].depth
 			length = extractArr[i].width * extractArr[i].height * extractArr[i].depth
-			extractArr[i].shape = (c_char * length)()
+			extractArr[i].box = (c_char * length)()
 			for j in range(length):
-				extractArr[i].shape[j] = matchList[i].shape[j]
+				extractArr[i].box[j] = matchList[i].box[j]
 		return extractArr
 
 if __name__ == '__main__':
