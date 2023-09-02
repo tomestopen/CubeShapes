@@ -2,6 +2,7 @@
 
 //definitions
 #define MAXDICTLEN 10000000 //the maximum dictionary length is ten million entries
+#define MINBATCHSIZE 100 //the minimum batch size for the multi-threaded function
 //external variables
 static int cornerDir[8][3] = {{1, 1, 1}, {-1, 1, 1}, {1, -1, 1}, {-1, -1, 1}, {1, 1, -1}, {-1, 1, -1}, {1, -1, -1}, {-1, -1, -1}};
 static int dimOrder[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
@@ -703,40 +704,54 @@ VOID CALLBACK DescendentWorkCallback(PTP_CALLBACK_INSTANCE instance, PVOID param
 	workData->descCount = GetDescendents(&workData->descendentArr, workData->source, workData->sourceCount);
 }
 
-int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads){
+int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads, int batchSize){
 	//this function returns the descendents of the source shapes, splitting the workload between multiple threads
-	//check that the source has at least ten shapes
-	if (sourceCount <= 100){
-		//if there are less than a hundred source shapes, simply return the results from the single thread function
-		return GetDescendents(descendents, source, sourceCount);
-	}
-	//if there are more than ten sources, use multiple threads
 	TP_CALLBACK_ENVIRON callBackEnv;
-	PTP_POOL pool = 0;
+	PTP_POOL pool;
 	PTP_WORK *workArr;
 	PTP_CLEANUP_GROUP cleanupgroup;
-	int cleanStep = 0;
+	int cleanStep;
 	int workCount, hasPartialBatch, workDone;
 	CubeShape *shapeArr;
 	WorkData *workDataArr;
-	int dictLen;
+	int dictLen, maxBatchSize;
 	void **shapeDict;
-	int shapeCount = 0;
+	int shapeCount;
 	int i, j;
+	//check that the source has shape count greater than the minimum batch size
+	if (sourceCount <= MINBATCHSIZE){
+		//if does not, simply return the results from the single thread function
+		return GetDescendents(descendents, source, sourceCount);
+	}
+	//if there are enough source shapes, use multiple threads
+	pool = 0;
+	cleanStep = 0;
+	shapeCount = 0;
+	//check that the batch size is sensible
+	maxBatchSize = sourceCount / maxThreads;
+	if (maxBatchSize < MINBATCHSIZE) maxBatchSize = MINBATCHSIZE;
+	if (batchSize < 1){
+		//if the batch size is zero or less, divide the work into equal parts for each thread
+		batchSize = maxBatchSize;
+	}
+	else if (batchSize > maxBatchSize){
+		//if the batch size is too big with respect to the number of threads, set it to the maximum allowed
+		batchSize = maxBatchSize;
+	}
 	//get the number of work items and initialize the work arrays
-	hasPartialBatch = ((sourceCount % 100) > 0);
-	workCount = (sourceCount / 100) + hasPartialBatch;
+	hasPartialBatch = ((sourceCount % batchSize) > 0);
+	workCount = sourceCount / batchSize;
 	workDataArr = (WorkData *) malloc(sizeof(WorkData) * workCount);
 	//add the work data for all work groups
 	shapeArr = source;
 	for (i = 0; i < workCount; i++){
-		workDataArr[i].sourceCount = 100; //the source count is always 100 except for the last work batch
+		workDataArr[i].sourceCount = batchSize; //the source count is always the batch size except for the last work batch
 		workDataArr[i].source = shapeArr;
 		workDataArr[i].descCount = -1;
-		shapeArr += 100;
+		shapeArr += batchSize;
 	}
 	if (hasPartialBatch)
-		workDataArr[workCount - 1].sourceCount = (sourceCount % 100); //if the last work batch is partial (not 100 shapes) store the correct source count
+		workDataArr[workCount - 1].sourceCount += (sourceCount % batchSize); //if the there is a partial work batch, add it to the last one
 	//create the thread pool work array
 	workArr = malloc(sizeof(PTP_WORK) * workCount);
 	//set up thread pool

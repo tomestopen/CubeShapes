@@ -24,7 +24,7 @@
 		DLL_EXPORT int CompareShapeLists(CubeShape *firstList, int firstLength, CubeShape *secondList, int secondLength, CubeShape *missingList);
 		DLL_EXPORT void SetShapeListValues(CubeShape *shapeList, int listLength);
 		DLL_EXPORT int CheckDistinct(CubeShape *firstShape, CubeShape *secondShape);
-		DLL_EXPORT int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads);
+		DLL_EXPORT int GetDescendentsMulti(CubeShape **descendents, CubeShape *source, int sourceCount, int maxThreads, int batchSize);
 	#else
 		//***** Shared object function prototypes *****//
 		int GetDescendents(CubeShape **descendents, CubeShape *source, int sourceCount);

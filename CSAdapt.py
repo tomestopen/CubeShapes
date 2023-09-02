@@ -52,5 +52,5 @@ class CubeShapesSL:
 			#load the multi threaded get descendents function, (if on windows)
 			if system == "Windows":
 				self.getDescendentsMulti = self.SL.GetDescendentsMulti
-				self.getDescendentsMulti.argtypes = [POINTER(POINTER(CubeShape)), POINTER(CubeShape), c_int, c_int]
+				self.getDescendentsMulti.argtypes = [POINTER(POINTER(CubeShape)), POINTER(CubeShape), c_int, c_int, c_int]
 				self.getDescendentsMulti.restype = c_int
