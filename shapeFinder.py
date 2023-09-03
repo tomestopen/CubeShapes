@@ -57,12 +57,14 @@ class ShapeFinder:
 		#find and save all shapes for cube counts starting at the first one with a shape file and ending at the requested count
 		sourceList = sourceShapeList
 		while cubeCountP <= cubeCount:
+			#signal the start of the search for the current cube count
+			print("Searching shapes for cube count " + str(cubeCountP))
 			#get the descendents shapes for the current source shapes
 			time = datetime.now(timezone.utc).timestamp()
 			descList = POINTER(CubeShape)()
 			if (threadCount > 1) and (callable(getattr(self.CSSL, "getDescendentsMulti", None))):
 				#use the multi threaded get descendents function if it is available
-				descCount = self.CSSL.getDescendentsMulti(pointer(descList), sourceList, sourceShapeCount, threadCount)
+				descCount = self.CSSL.getDescendentsMulti(pointer(descList), sourceList, sourceShapeCount, threadCount, 0)
 			else:
 				#otherwise use the single thread version
 				descCount = self.CSSL.getDescendents(pointer(descList), sourceList, sourceShapeCount)
